@@ -55,8 +55,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    jh_refresh.await;
-    jh_probe.await;
+    jh_refresh.await.unwrap();
+    jh_probe.await.unwrap();
+
+    let services = services.read().await;
+    for svc in services.iter() {
+        let svc = svc.read().await;
+        debug!("svc after hc: {:?}", svc);
+    }
+
     Ok(())
 }
 

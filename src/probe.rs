@@ -1,4 +1,4 @@
-use log::error;
+use log::{debug, error};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -34,10 +34,12 @@ async fn do_probe(svc: Arc<RwLock<Service>>) {
                     let res = tokio::net::TcpStream::connect(ep.addr).await;
                     match res {
                         Ok(_) => {
-                            println!("{:?} connected", ep.addr)
+                            debug!("{:?} connected", ep.addr);
+                            // TODO
+                            ep.status = EndpointStatus::Removed;
                         }
                         Err(e) => {
-                            println!("failed to connect to {:?}, {}", ep.addr, e);
+                            error!("failed to connect to {:?}, {}", ep.addr, e);
                             ep.status = EndpointStatus::Removed;
                         }
                     }
