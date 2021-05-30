@@ -3,11 +3,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
-use crate::kube::{Service, EndpointStatus};
+use crate::kube::{EndpointStatus, Service};
 
-pub(crate) async fn probe(svcs: Vec<Service>) {
-    for svc in svcs {
-        let svc = Arc::new(RwLock::new(svc));
+pub(crate) async fn probe(svcs: Arc<RwLock<Vec<Arc<RwLock<Service>>>>>) {
+    let svcs = svcs.read().await;
+    for svc in svcs.iter() {
+        let svc = svc.clone();
         do_probe(svc).await;
     }
 }
@@ -93,7 +94,7 @@ mod tests {
         }));
 
         super::do_probe(svc.clone()).await;
-        
+
         let svc_clone = svc.read().await;
         println!("eps after edit: {:?}", svc_clone.endpoints);
     }

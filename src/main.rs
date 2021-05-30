@@ -1,6 +1,9 @@
-use std::{ops::DerefMut, sync::Arc};
-use tokio::{sync::RwLock, time::{self, Duration}};
-use log::{debug, info, error};
+use log::{debug, error, info};
+use std::sync::Arc;
+use tokio::{
+    sync::RwLock,
+    time::{self, Duration},
+};
 
 mod error;
 mod kube;
@@ -13,23 +16,17 @@ const REMOVED_DOWNS: u8 = 3;
 // ms to consider an ep is down
 const CONNECT_TIMEOUT: u64 = 100;
 
-struct Ephc {
-    services: Arc<RwLock<Vec<kube::Service>>>
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init();
 
-    let ephc = Ephc {
-        services: Arc::new(RwLock::new(vec![]))
-    };
+    let services = Arc::new(RwLock::new(vec![]));
 
     // TODO: take from cli
     let refresh_interval = 1;
     let probe_interval = 1000;
 
-    let svcs = ephc.services.clone();
+    let svcs = services.clone();
     let mut interval = time::interval(Duration::from_secs(refresh_interval));
     let jh_refresh = tokio::task::spawn(async move {
         loop {
@@ -43,24 +40,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
             *svcs.write().await = res;
-            break
+            break;
         }
     });
 
-    let svcs = ephc.services.clone();
+    let svcs = services.clone();
     let mut interval = time::interval(Duration::from_millis(probe_interval));
     let jh_probe = tokio::task::spawn(async move {
         loop {
             interval.tick().await;
             debug!("start probing");
-            let svcs = svcs.clone();
-            let svcs = svcs.read().await;
-            let svcs = svcs.to_owned();
-            probe::probe(svcs);
-            break
+            probe::probe(svcs).await;
+            break;
         }
     });
-   
 
     jh_refresh.await;
     jh_probe.await;

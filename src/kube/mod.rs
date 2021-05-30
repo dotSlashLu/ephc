@@ -1,6 +1,6 @@
 use crate::error::Result;
 use log::{debug, error, warn};
-use std::{str::FromStr, net::SocketAddr, process::Command, sync::Arc};
+use std::{net::SocketAddr, process::Command, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
 
 mod yaml;
@@ -113,15 +113,15 @@ fn exec(cmdline: &str) -> Result<String> {
     Ok(stdout)
 }
 
-pub(crate) fn get_svcs() -> Result<Vec<Service>> {
+pub(crate) fn get_svcs() -> Result<Vec<Arc<RwLock<Service>>>> {
     let names = get_svc_names()?;
-    let mut svcs = Vec::<Service>::new();
+    let mut svcs = Vec::<Arc<RwLock<Service>>>::new();
     for n in names {
         let svc = get_svc(n)?;
         if svc.is_none() {
-            continue
+            continue;
         }
-        svcs.push(svc.unwrap())
+        svcs.push(Arc::new(RwLock::new(svc.unwrap())))
     }
     Ok(svcs)
 }
@@ -133,7 +133,10 @@ fn get_svc_names() -> Result<Vec<String>> {
 }
 
 fn get_svc(svc_name: String) -> Result<Option<Service>> {
-    let yml_str = exec(&format!("set -eo pipefail; kubectl get ep {} -o yaml", svc_name))?;
+    let yml_str = exec(&format!(
+        "set -eo pipefail; kubectl get ep {} -o yaml",
+        svc_name
+    ))?;
     Service::new(yml_str)
 }
 
