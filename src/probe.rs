@@ -1,39 +1,69 @@
 use log::error;
-use std::net::SocketAddr;
+use std::sync::{Arc, Mutex as StdMutex};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
-use crate::kube;
+use crate::kube::{self, Endpoint};
 
-async fn probe(svcs: &Vec<kube::Service>) {
+async fn probe(svcs: Vec<kube::Service>) {
     for svc in svcs {
+        let svc = Box::new(Arc::new(Mutex::new(svc)));
         let (ups, downs) = do_probe(svc).await;
-    };
+    }
 }
 
 // TODO: use stream to increase concurrency
-async fn do_probe(svc: &kube::Service) -> (Vec<&kube::Endpoint>, Vec<&kube::Endpoint>) {
+async fn do_probe(
+    svc: Box<Arc<Mutex<kube::Service>>>,
+) -> (Vec<&'static kube::Endpoint>, Vec<&'static kube::Endpoint>) {
     let mut down = Vec::<&kube::Endpoint>::new();
     let mut up = Vec::<&kube::Endpoint>::new();
-    for ep in &svc.endpoints {
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(crate::CONNECT_TIMEOUT),
-            tokio::net::TcpStream::connect(ep.addr),
-        )
-        .await
-        {
+
+    let mut jhs = Vec::<(JoinHandle<_>, usize)>::new();
+    let svc1 = Arc::clone(&svc);
+    let svc1 = svc.lock().await;
+    let l = svc1.endpoints.len();
+    drop(svc1);
+    for i in 0..l {
+        jhs.push((
+            tokio::spawn(tokio::time::timeout(
+                std::time::Duration::from_secs(crate::CONNECT_TIMEOUT),
+                async move {
+                    let svc = Arc::clone(&svc);
+                    let svc = svc.lock().await;
+                    tokio::net::TcpStream::connect(svc.endpoints[i].addr).await
+                },
+            )),
+            i,
+        ));
+    }
+
+    for (jh, i) in jhs {
+        let join_res = jh.await;
+        if join_res.is_err() {
+            error!("failed to join! task: {}", join_res.unwrap_err());
+            continue;
+        }
+        // let (res, ep) = join_res.unwrap();
+        let res = join_res.unwrap();
+        println!("{:?}", res);
+        let ep = &Arc::clone(&svc).lock().await.endpoints[i];
+        match res {
             Ok(res) => {
                 if res.is_err() {
                     error!("failed to connect to {}: {}", ep.addr, res.unwrap_err());
                     down.push(&ep);
                     continue;
                 }
-                up.push(&ep);
+                up.push(ep);
             }
             Err(_) => {
                 error!("failed to connect to {}: timed out", ep.addr);
-                down.push(&ep)
+                down.push(ep);
             }
         };
     }
+
     (up, down)
 }
 

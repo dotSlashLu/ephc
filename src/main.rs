@@ -1,5 +1,5 @@
-mod kube;
 mod error;
+mod kube;
 mod probe;
 
 // how many ups will be re-added to ep

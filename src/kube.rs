@@ -70,7 +70,8 @@ impl Service {
                     let ep = Endpoint {
                         addr,
                         status: EndpointStatus::Healthy,
-                        counter_up: 0, counter_down: 0,
+                        counter_up: 0,
+                        counter_down: 0,
                     };
                     eps.push(ep);
                 }
@@ -159,7 +160,7 @@ pub(crate) fn get_eps(svc_name: String) -> Result<Option<Service>> {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-    
+
     const YML_STR: &str = "
 apiVersion: v1
 kind: Endpoints

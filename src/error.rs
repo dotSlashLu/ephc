@@ -20,7 +20,7 @@ pub(crate) enum ErrorKind {
     Io,
     Serde,
     AddrParseError,
-    Other
+    Other,
 }
 
 impl std::string::ToString for ErrorKind {
@@ -37,21 +37,26 @@ impl std::string::ToString for ErrorKind {
 #[derive(Debug)]
 pub(crate) struct Error {
     kind: ErrorKind,
-    inner: Box<dyn std::error::Error>
+    inner: Box<dyn std::error::Error>,
 }
 
 impl Error {
     pub fn new(reason: &'static str) -> Self {
         Self {
             kind: ErrorKind::Other,
-            inner: Box::new(OtherError{reason})
+            inner: Box::new(OtherError { reason }),
         }
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ephc error, kind: {}, err: {}", self.kind.to_string(), self.inner.to_string())
+        write!(
+            f,
+            "ephc error, kind: {}, err: {}",
+            self.kind.to_string(),
+            self.inner.to_string()
+        )
     }
 }
 
@@ -59,7 +64,7 @@ impl From<serde_yaml::Error> for Error {
     fn from(e: serde_yaml::Error) -> Self {
         Self {
             kind: ErrorKind::Serde,
-            inner: Box::new(e)
+            inner: Box::new(e),
         }
     }
 }
@@ -68,7 +73,7 @@ impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Self {
             kind: ErrorKind::Io,
-            inner: Box::new(e)
+            inner: Box::new(e),
         }
     }
 }
@@ -77,7 +82,7 @@ impl From<std::net::AddrParseError> for Error {
     fn from(e: AddrParseError) -> Self {
         Self {
             kind: ErrorKind::AddrParseError,
-            inner: Box::new(e)
+            inner: Box::new(e),
         }
     }
 }
