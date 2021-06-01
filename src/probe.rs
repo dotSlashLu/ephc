@@ -5,9 +5,10 @@ use tokio::task::JoinHandle;
 
 use crate::kube::{Service, EndpointStatus};
 
-pub(crate) async fn probe(svcs: Arc<RwLock<Vec<Service>>>) {
+pub(crate) async fn probe(svcs: Vec<Service>) {
     for svc in svcs {
         let svc = Arc::new(RwLock::new(svc));
+        do_probe(svc).await;
     }
 }
 
@@ -27,9 +28,8 @@ async fn do_probe(svc: Arc<RwLock<Service>>) {
             tokio::spawn(tokio::time::timeout(
                 std::time::Duration::from_millis(crate::CONNECT_TIMEOUT),
                 async move {
-                    let svc = svc_clone.read().await;
-                    let ep = svc.endpoints[i].clone();
-                    let mut ep = ep.write().await;
+                    let mut svc = svc_clone.write().await;
+                    let mut ep = &mut svc.endpoints[i];
                     let res = tokio::net::TcpStream::connect(ep.addr).await;
                     match res {
                         Ok(_) => {
@@ -71,18 +71,18 @@ mod tests {
     #[tokio::test]
     async fn do_probe() {
         let eps = vec![
-            Arc::new(RwLock::new(kube::Endpoint {
+            kube::Endpoint {
                 addr: SocketAddr::from_str("127.0.0.1:44307").unwrap(),
                 status: kube::EndpointStatus::Healthy,
                 counter_up: 0,
                 counter_down: 0,
-            })),
-            Arc::new(RwLock::new(kube::Endpoint {
+            },
+            kube::Endpoint {
                 addr: SocketAddr::from_str("127.0.0.1:80").unwrap(),
                 status: kube::EndpointStatus::Healthy,
                 counter_up: 0,
                 counter_down: 0,
-            })),
+            },
         ];
 
         let svc = Arc::new(RwLock::new(kube::Service {

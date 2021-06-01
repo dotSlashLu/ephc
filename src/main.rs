@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::DerefMut, sync::Arc};
 use tokio::{sync::RwLock, time::{self, Duration}};
 use log::{debug, info, error};
 
@@ -53,13 +53,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             debug!("start probing");
+            let svcs = svcs.clone();
+            let svcs = svcs.read().await;
+            let svcs = svcs.to_owned();
             probe::probe(svcs);
             break
         }
     });
    
 
-    jh.await;
+    jh_refresh.await;
+    jh_probe.await;
     Ok(())
 }
 

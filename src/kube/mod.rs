@@ -50,7 +50,7 @@ impl Endpoint {
 pub(crate) struct Service {
     pub name: String,
     pub kind: ServiceKind,
-    pub endpoints: Vec<Arc<RwLock<Endpoint>>>,
+    pub endpoints: Vec<Endpoint>,
     pub yaml: String,
 }
 
@@ -59,7 +59,7 @@ impl Service {
     fn new(yml_str: String) -> Result<Option<Service>> {
         let svc = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
         let subsets: Vec<SubsetRepr> = svc.subsets;
-        let mut eps = Vec::<Arc<RwLock<Endpoint>>>::new();
+        let mut eps = Vec::<Endpoint>::new();
         for subset in subsets {
             for port in &subset.ports {
                 if port.protocol == "UDP" {
@@ -69,12 +69,12 @@ impl Service {
 
                 for addr in &subset.addresses {
                     let addr = SocketAddr::from_str(&format!("{}:{}", addr.ip, port.port))?;
-                    let ep = Arc::new(RwLock::new(Endpoint {
+                    let ep = Endpoint {
                         addr,
                         status: EndpointStatus::Healthy,
                         counter_up: 0,
                         counter_down: 0,
-                    }));
+                    };
                     eps.push(ep);
                 }
             }
