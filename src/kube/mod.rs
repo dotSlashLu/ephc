@@ -1,8 +1,10 @@
 use crate::error::Result;
 use log::{debug, error, warn};
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-use std::{net::SocketAddr, process::Command};
+use std::{str::FromStr, net::SocketAddr, process::Command, sync::Arc};
+use tokio::sync::RwLock;
+
+mod yaml;
+use yaml::*;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ServiceKind {
@@ -48,7 +50,7 @@ impl Endpoint {
 pub(crate) struct Service {
     pub name: String,
     pub kind: ServiceKind,
-    pub endpoints: Vec<Endpoint>,
+    pub endpoints: Vec<Arc<RwLock<Endpoint>>>,
     pub yaml: String,
 }
 
@@ -57,7 +59,7 @@ impl Service {
     fn new(yml_str: String) -> Result<Option<Service>> {
         let svc = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
         let subsets: Vec<SubsetRepr> = svc.subsets;
-        let mut eps = Vec::<Endpoint>::new();
+        let mut eps = Vec::<Arc<RwLock<Endpoint>>>::new();
         for subset in subsets {
             for port in &subset.ports {
                 if port.protocol == "UDP" {
@@ -67,12 +69,12 @@ impl Service {
 
                 for addr in &subset.addresses {
                     let addr = SocketAddr::from_str(&format!("{}:{}", addr.ip, port.port))?;
-                    let ep = Endpoint {
+                    let ep = Arc::new(RwLock::new(Endpoint {
                         addr,
                         status: EndpointStatus::Healthy,
                         counter_up: 0,
                         counter_down: 0,
-                    };
+                    }));
                     eps.push(ep);
                 }
             }
@@ -90,47 +92,12 @@ impl Service {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct AddressRepr {
-    ip: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PortRepr {
-    port: u32,
-    protocol: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SubsetRepr {
-    addresses: Vec<AddressRepr>,
-    ports: Vec<PortRepr>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ServiceMetadataRepr {
-    name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ServiceRepr {
-    metadata: ServiceMetadataRepr,
-    subsets: Vec<SubsetRepr>,
-}
-
-impl FromStr for ServiceRepr {
-    type Err = serde_yaml::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        serde_yaml::from_str(s)
-    }
-}
-
 fn exec(cmdline: &str) -> Result<String> {
-    let mut cmd = Command::new("sh");
+    let mut cmd = Command::new("bash");
     let cmd = cmd.arg("-c").arg(cmdline);
 
     let status = cmd.status()?;
+    debug!("command status: {:?}", status);
     let output = cmd.output().expect("failed to execute process");
 
     if !status.success() {
@@ -146,14 +113,27 @@ fn exec(cmdline: &str) -> Result<String> {
     Ok(stdout)
 }
 
-pub(crate) fn get_svcs() -> Result<Vec<String>> {
-    let stdout = exec("kubectl get svc | grep ClusterIP | gawk '{print $1}'")?;
+pub(crate) fn get_svcs() -> Result<Vec<Service>> {
+    let names = get_svc_names()?;
+    let mut svcs = Vec::<Service>::new();
+    for n in names {
+        let svc = get_svc(n)?;
+        if svc.is_none() {
+            continue
+        }
+        svcs.push(svc.unwrap())
+    }
+    Ok(svcs)
+}
+
+fn get_svc_names() -> Result<Vec<String>> {
+    let stdout = exec("set -eo pipefail; kubectl get svc | grep ClusterIP | gawk '{print $1}'")?;
     let lines: Vec<String> = stdout.lines().map(|el| el.to_owned()).collect();
     Ok(lines)
 }
 
-pub(crate) fn get_eps(svc_name: String) -> Result<Option<Service>> {
-    let yml_str = exec(&format!("kubectl get ep {} -o yaml", svc_name))?;
+fn get_svc(svc_name: String) -> Result<Option<Service>> {
+    let yml_str = exec(&format!("set -eo pipefail; kubectl get ep {} -o yaml", svc_name))?;
     Service::new(yml_str)
 }
 
@@ -191,8 +171,8 @@ subsets:
     protocol: TCP";
 
     #[test]
-    fn get_svcs() {
-        super::get_svcs();
+    fn get_svc_names() {
+        super::get_svc_names();
     }
 
     #[test]
