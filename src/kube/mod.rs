@@ -1,5 +1,7 @@
 use crate::error::Result;
 use log::{debug, error, warn};
+use std::io::Write;
+use std::time::SystemTime;
 use std::{net::SocketAddr, process::Command, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -31,17 +33,56 @@ pub(crate) enum EndpointStatus {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct Threshold {
+    pub restore: u32,
+    pub remove: u32,
+}
+#[derive(Debug, Clone)]
+pub(crate) struct Counter {
+    pub up: u32,
+    pub down: u32,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Endpoint {
     pub addr: SocketAddr,
     pub status: EndpointStatus,
-    pub counter_up: u64,
-    pub counter_down: u64,
+    counter: Counter,
+    threshold: Threshold,
 }
 
 impl Endpoint {
+    pub fn up(&mut self) -> bool {
+        match self.status {
+            EndpointStatus::Removed => {
+                self.counter.up += 1;
+                return if self.counter.up >= self.threshold.restore {
+                    true
+                } else {
+                    false
+                };
+            }
+            _ => false,
+        }
+    }
+
+    pub fn down(&mut self) -> bool {
+        match self.status {
+            EndpointStatus::Healthy => {
+                self.counter.down += 1;
+                return if self.counter.down >= self.threshold.remove {
+                    true
+                } else {
+                    false
+                };
+            }
+            _ => false,
+        }
+    }
+
     pub fn reset_counter(&mut self) -> &Self {
-        self.counter_up = 0;
-        self.counter_down = 0;
+        self.counter.up = 0;
+        self.counter.down = 0;
         self
     }
 }
@@ -51,14 +92,14 @@ pub(crate) struct Service {
     pub name: String,
     pub kind: ServiceKind,
     pub endpoints: Vec<Endpoint>,
-    pub yaml: String,
+    pub yaml: ServiceRepr,
 }
 
 impl Service {
     // construct a Service from yaml
-    fn new(yml_str: String) -> Result<Option<Service>> {
-        let svc = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
-        let subsets: Vec<SubsetRepr> = svc.subsets;
+    fn new(yml_str: String, threshold: Threshold) -> Result<Option<Service>> {
+        let svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
+        let subsets: &Vec<SubsetRepr> = &svc_repr.subsets;
         let mut eps = Vec::<Endpoint>::new();
         for subset in subsets {
             for port in &subset.ports {
@@ -72,8 +113,8 @@ impl Service {
                     let ep = Endpoint {
                         addr,
                         status: EndpointStatus::Healthy,
-                        counter_up: 0,
-                        counter_down: 0,
+                        counter: Counter { up: 0, down: 0 },
+                        threshold: threshold.clone(),
                     };
                     eps.push(ep);
                 }
@@ -83,12 +124,38 @@ impl Service {
             return Ok(None);
         }
 
+        let name = svc_repr.metadata.name.clone();
         Ok(Some(Service {
-            name: svc.metadata.name,
+            name: name,
             kind: ServiceKind::TCP,
             endpoints: eps,
-            yaml: yml_str,
+            yaml: svc_repr,
         }))
+    }
+
+    pub fn remove_ep(&mut self, i: usize) {
+        let ep = self.endpoints[i].addr;
+        debug!("should remove ep: {:?}", ep);
+        let ep_ip = ep.ip();
+        for subset in &mut self.yaml.subsets {
+            subset.addresses.retain(|addr| {
+                let ip = match std::net::IpAddr::from_str(&addr.ip) {
+                    Ok(ip) => ip,
+                    Err(_) => {
+                        error!("failed to parse {}", addr.ip);
+                        return false;
+                    }
+                };
+                if ip == ep_ip {
+                    return false;
+                }
+                true
+            });
+        }
+    }
+
+    pub fn restore_ep(&mut self, i: usize) {
+        debug!("should restore ep: {:?}", self.endpoints[i]);
     }
 }
 
@@ -113,11 +180,27 @@ fn exec(cmdline: &str) -> Result<String> {
     Ok(stdout)
 }
 
-pub(crate) fn get_svcs() -> Result<Vec<Arc<RwLock<Service>>>> {
+fn apply_svc(name: &str, yml: &str) -> Result<()> {
+    let t = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(n) => n.as_secs(),
+        Err(e) => {
+            error!("failed to get time: {}", e);
+            0
+        }
+    };
+    let fname = format!("/tmp/ephc_{}_{}", t, name);
+    let mut file = std::fs::File::create(name)?;
+    file.write_all(yml.as_bytes())?;
+
+    exec(&format!("set -eo pipefail; kubectl apply -f {}", fname))?;
+    Ok(())
+}
+
+pub(crate) fn get_svcs(t: Threshold) -> Result<Vec<Arc<RwLock<Service>>>> {
     let names = get_svc_names()?;
     let mut svcs = Vec::<Arc<RwLock<Service>>>::new();
     for n in names {
-        let svc = get_svc(n)?;
+        let svc = get_svc(n, t.clone())?;
         if svc.is_none() {
             continue;
         }
@@ -132,12 +215,12 @@ fn get_svc_names() -> Result<Vec<String>> {
     Ok(lines)
 }
 
-fn get_svc(svc_name: String) -> Result<Option<Service>> {
+fn get_svc(svc_name: String, t: Threshold) -> Result<Option<Service>> {
     let yml_str = exec(&format!(
         "set -eo pipefail; kubectl get ep {} -o yaml",
         svc_name
     ))?;
-    Service::new(yml_str)
+    Service::new(yml_str, t)
 }
 
 #[cfg(test)]
@@ -186,7 +269,11 @@ subsets:
 
     #[test]
     fn service_new() {
-        let svc = super::Service::new(String::from(YML_STR));
+        let threshold = super::Threshold {
+            restore: 3,
+            remove: 3,
+        };
+        let svc = super::Service::new(String::from(YML_STR), threshold);
         println!("{:?}", svc);
     }
 }

@@ -32,7 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             info!("refresh service list");
-            let res = match kube::get_svcs() {
+            let res = match kube::get_svcs(kube::Threshold {
+                restore: 3,
+                remove: 3
+            }) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
