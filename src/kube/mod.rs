@@ -1,16 +1,18 @@
 use crate::error::Result;
 use log::{debug, error};
-use std::io::Write;
 use std::time::SystemTime;
+use std::{io::Write, str::FromStr};
 use std::{process::Command, sync::Arc};
 use tokio::sync::RwLock;
 
-mod yaml;
 mod endpoint;
 mod service;
+mod yaml;
 
-pub use service::*;
 pub use endpoint::*;
+pub use service::*;
+
+use self::yaml::ServiceRepr;
 
 fn exec(cmdline: &str) -> Result<String> {
     let mut cmd = Command::new("bash");
@@ -49,8 +51,15 @@ fn apply_svc(name: &str, yml: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get_svcs(t: Threshold) -> Result<Vec<Arc<RwLock<Service>>>> {
-    let names = get_svc_names()?;
+pub(crate) fn get_svcs(
+    allow: Option<Vec<&'static str>>,
+    block: Option<Vec<&'static str>>,
+    t: Threshold,
+) -> Result<Vec<Arc<RwLock<Service>>>> {
+    let names: Vec<String> = match allow {
+        Some(allow) => allow.iter().map(|n| (*n).to_owned()).collect(),
+        None => get_svc_names(block)?,
+    };
     let mut svcs = Vec::<Arc<RwLock<Service>>>::new();
     for n in names {
         let svc = get_svc(n, t.clone())?;
@@ -62,17 +71,27 @@ pub(crate) fn get_svcs(t: Threshold) -> Result<Vec<Arc<RwLock<Service>>>> {
     Ok(svcs)
 }
 
-fn get_svc_names() -> Result<Vec<String>> {
+fn get_svc_names(block: Option<Vec<&'static str>>) -> Result<Vec<String>> {
+    let block = match block {
+        Some(l) => l,
+        None => vec!["kubernetes"],
+    };
+
     let stdout = exec("set -eo pipefail; kubectl get svc | grep ClusterIP | gawk '{print $1}'")?;
-    let lines: Vec<String> = stdout.lines().map(|el| el.to_owned()).collect();
+    let mut lines: Vec<String> = stdout.lines().map(|el| el.to_owned()).collect();
+    lines.retain(|el| !block.contains(&&el[..]));
     Ok(lines)
 }
 
-fn get_svc(svc_name: String, t: Threshold) -> Result<Option<Service>> {
-    let yml_str = exec(&format!(
+fn get_svc_repr(svc_name: &str) -> Result<String> {
+    exec(&format!(
         "set -eo pipefail; kubectl get ep {} -o yaml",
         svc_name
-    ))?;
+    ))
+}
+
+fn get_svc(svc_name: String, t: Threshold) -> Result<Option<Service>> {
+    let yml_str = get_svc_repr(&svc_name)?;
     Service::new(yml_str, t)
 }
 
@@ -111,7 +130,7 @@ subsets:
 
     #[test]
     fn get_svc_names() {
-        super::get_svc_names();
+        super::get_svc_names(None);
     }
 
     #[test]

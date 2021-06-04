@@ -10,8 +10,8 @@ pub(crate) struct Service {
     pub name: String,
     pub endpoints: Vec<Endpoint>,
     // update this after updating k8s, if the new version got from k8s changed
-    // means this service has been changed from outside and all members need 
-    // to be refreshed 
+    // means this service has been changed from outside and all members need
+    // to be refreshed
     pub our_version: String,
     pub yaml: ServiceRepr,
 }
@@ -49,12 +49,13 @@ impl Service {
         Ok(Some(Service {
             name: svc_repr.metadata.name.clone(),
             endpoints: eps,
-            our_version: svc_repr.metadata.resourceVersion.clone(),
+            our_version: svc_repr.metadata.resource_version.clone(),
             yaml: svc_repr,
         }))
     }
 
-    pub fn remove_ep(&mut self, i: usize) {
+    // remove ep and return new version
+    pub fn remove_ep(&mut self, i: usize) -> Result<()> {
         let ep = self.endpoints[i].addr;
         debug!("should remove ep: {:?}", ep);
         let ep_ip = ep.ip();
@@ -73,6 +74,12 @@ impl Service {
                 true
             });
         }
+        let yml = self.yaml.to_yaml()?;
+        super::apply_svc(&self.name, &yml);
+        let yml = super::get_svc_repr(&self.name)?;
+        let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
+        self.our_version = new_svc.metadata.resource_version;
+        Ok(())
     }
 
     pub fn restore_ep(&mut self, i: usize) {

@@ -20,7 +20,9 @@ const CONNECT_TIMEOUT: u64 = 100;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init();
 
-    let services = Arc::new(RwLock::new(HashMap::<String, Arc<RwLock<kube::Service>>>::new()));
+    let services = Arc::new(RwLock::new(
+        HashMap::<String, Arc<RwLock<kube::Service>>>::new(),
+    ));
 
     // TODO: take from cli
     let refresh_interval = 1;
@@ -36,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 restore: 3,
                 remove: 3,
             };
-            let res = match kube::get_svcs(t) {
+            let res = match kube::get_svcs(None, None, t) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
@@ -52,10 +54,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let old = old.clone();
                         let old_reader = old.read().await;
                         if old_reader.our_version == svc_reader.our_version {
-                            continue
+                            debug!("service {} not changed", svc_reader.name);
+                            continue;
                         }
+                        debug!(
+                            "service {} changed from outside, replacing",
+                            svc_reader.name
+                        );
                         svcs_writer.insert(svc_reader.name.clone(), svc);
-                    },
+                    }
                     None => {
                         svcs_writer.insert(svc_reader.name.clone(), svc);
                     }

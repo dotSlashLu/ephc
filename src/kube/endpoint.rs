@@ -24,11 +24,12 @@ pub(crate) enum EndpointStatus {
     Removed,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Threshold {
     pub restore: u32,
     pub remove: u32,
 }
+
 #[derive(Debug, Clone)]
 pub(crate) struct Counter {
     pub up: u32,

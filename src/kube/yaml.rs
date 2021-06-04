@@ -20,15 +20,19 @@ pub struct SubsetRepr {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceMetadataRepr {
     pub name: String,
-    pub resourceVersion: String,
+    pub resource_version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceRepr {
+pub(crate) struct ServiceRepr {
+    api_version: String,
+    kind: String,
     pub metadata: ServiceMetadataRepr,
     pub subsets: Vec<SubsetRepr>,
+    #[serde(skip_serializing)]
     yaml: String,
 }
 
@@ -41,8 +45,42 @@ impl FromStr for ServiceRepr {
 }
 
 impl ServiceRepr {
-    fn to_yaml(&self) -> Result<String> {
+    pub fn to_yaml(&self) -> Result<String> {
         let yaml = serde_yaml::to_string(self)?;
         Ok(yaml)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn to_yaml() {
+        let s = ServiceRepr {
+            api_version: "v1".to_owned(),
+            kind: "Endpoints".to_owned(),
+            metadata: ServiceMetadataRepr {
+                name: String::from_str("test").unwrap(),
+                resource_version: String::from_str("1").unwrap(),
+            },
+            subsets: vec![SubsetRepr {
+                addresses: vec![AddressRepr {
+                    ip: String::from_str("1.1.1.1").unwrap(),
+                }],
+                ports: vec![
+                    PortRepr {
+                        port: 23,
+                        protocol: String::from_str("UDP").unwrap(),
+                    },
+                    PortRepr {
+                        port: 80,
+                        protocol: String::from_str("TCP").unwrap(),
+                    },
+                ],
+            }],
+            yaml: String::from_str("s").unwrap(),
+        };
+        println!("{:?}", s.to_yaml());
     }
 }
