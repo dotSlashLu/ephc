@@ -1,173 +1,16 @@
 use crate::error::Result;
-use log::{debug, error, warn};
+use log::{debug, error};
 use std::io::Write;
 use std::time::SystemTime;
-use std::{net::SocketAddr, process::Command, str::FromStr, sync::Arc};
+use std::{process::Command, sync::Arc};
 use tokio::sync::RwLock;
 
 mod yaml;
-use yaml::*;
+mod endpoint;
+mod service;
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Protocol {
-    TCP,
-    UDP,
-}
-
-impl FromStr for Protocol {
-    type Err = crate::error::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "TCP" => Ok(Self::TCP),
-            "UDP" => Ok(Self::UDP),
-            _ => Err(Self::Err::new("unknown service type")),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum EndpointStatus {
-    Healthy,
-    Removed,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Threshold {
-    pub restore: u32,
-    pub remove: u32,
-}
-#[derive(Debug, Clone)]
-pub(crate) struct Counter {
-    pub up: u32,
-    pub down: u32,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Endpoint {
-    pub addr: SocketAddr,
-    pub protocol: Protocol,
-    pub status: EndpointStatus,
-    counter: Counter,
-    threshold: Threshold,
-}
-
-impl Endpoint {
-    pub fn up(&mut self) -> bool {
-        match self.status {
-            EndpointStatus::Removed => {
-                self.counter.up += 1;
-                return if self.counter.up >= self.threshold.restore {
-                    true
-                } else {
-                    false
-                };
-            }
-            _ => false,
-        }
-    }
-
-    pub fn down(&mut self) -> bool {
-        match self.status {
-            EndpointStatus::Healthy => {
-                self.counter.down += 1;
-                return if self.counter.down >= self.threshold.remove {
-                    true
-                } else {
-                    false
-                };
-            }
-            _ => false,
-        }
-    }
-
-    pub fn reset_counter(&mut self) -> &Self {
-        self.counter.up = 0;
-        self.counter.down = 0;
-        self
-    }
-}
-
-impl std::cmp::PartialEq for Endpoint {
-    fn eq(&self, other: &Self) -> bool {
-        if self.addr == other.addr && self.protocol == other.protocol {
-            return true;
-        }
-        false
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Service {
-    pub name: String,
-    pub endpoints: Vec<Endpoint>,
-    pub version: String,
-    pub yaml: ServiceRepr,
-}
-
-impl Service {
-    // construct a Service from yaml
-    fn new(yml_str: String, threshold: Threshold) -> Result<Option<Service>> {
-        let svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
-        let subsets: &Vec<SubsetRepr> = &svc_repr.subsets;
-        let mut eps = Vec::<Endpoint>::new();
-        for subset in subsets {
-            for port in &subset.ports {
-                if port.protocol == "UDP" {
-                    warn!("we don't support UDP for now");
-                    continue;
-                }
-
-                for addr in &subset.addresses {
-                    let addr = SocketAddr::from_str(&format!("{}:{}", addr.ip, port.port))?;
-                    let ep = Endpoint {
-                        addr,
-                        protocol: Protocol::from_str(&port.protocol)?,
-                        status: EndpointStatus::Healthy,
-                        counter: Counter { up: 0, down: 0 },
-                        threshold: threshold.clone(),
-                    };
-                    eps.push(ep);
-                }
-            }
-        }
-        if eps.len() == 0 {
-            return Ok(None);
-        }
-
-        Ok(Some(Service {
-            name: svc_repr.metadata.name,
-            endpoints: eps,
-            version: svc_repr.metadata.resourceVersion,
-            yaml: svc_repr,
-        }))
-    }
-
-    pub fn remove_ep(&mut self, i: usize) {
-        let ep = self.endpoints[i].addr;
-        debug!("should remove ep: {:?}", ep);
-        let ep_ip = ep.ip();
-        for subset in &mut self.yaml.subsets {
-            subset.addresses.retain(|addr| {
-                let ip = match std::net::IpAddr::from_str(&addr.ip) {
-                    Ok(ip) => ip,
-                    Err(_) => {
-                        error!("failed to parse {}", addr.ip);
-                        return false;
-                    }
-                };
-                if ip == ep_ip {
-                    return false;
-                }
-                true
-            });
-        }
-    }
-
-    pub fn restore_ep(&mut self, i: usize) {
-        debug!("should restore ep: {:?}", self.endpoints[i]);
-    }
-}
+pub use service::*;
+pub use endpoint::*;
 
 fn exec(cmdline: &str) -> Result<String> {
     let mut cmd = Command::new("bash");
@@ -273,7 +116,7 @@ subsets:
 
     #[test]
     fn service_from_str() {
-        let svc = super::ServiceRepr::from_str(YML_STR);
+        let svc = super::yaml::ServiceRepr::from_str(YML_STR);
         println!("{:?}", svc);
     }
 

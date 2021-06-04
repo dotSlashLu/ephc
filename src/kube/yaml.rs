@@ -1,7 +1,6 @@
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use std::string::ToString;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddressRepr {

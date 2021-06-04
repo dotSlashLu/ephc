@@ -20,7 +20,7 @@ const CONNECT_TIMEOUT: u64 = 100;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init();
 
-    let services = Arc::new(RwLock::new(HashMap::new()));
+    let services = Arc::new(RwLock::new(HashMap::<String, Arc<RwLock<kube::Service>>>::new()));
 
     // TODO: take from cli
     let refresh_interval = 1;
@@ -43,12 +43,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     vec![]
                 }
             };
-            let svcs_reader = svcs.read().await;
+            let mut svcs_writer = svcs.write().await;
             for svc in res {
-                let svc = svc.read().await;
-                match svcs_reader.get(svc.name) {}
+                let svc_clone = svc.clone();
+                let svc_reader = svc_clone.read().await;
+                match svcs_writer.get(&svc_reader.name) {
+                    Some(old) => {
+                        let old = old.clone();
+                        let old_reader = old.read().await;
+                        if old_reader.our_version == svc_reader.our_version {
+                            continue
+                        }
+                        svcs_writer.insert(svc_reader.name.clone(), svc);
+                    },
+                    None => {
+                        svcs_writer.insert(svc_reader.name.clone(), svc);
+                    }
+                }
             }
-            *svcs.write().await = res;
+            // *svcs.write().await = res;
             break;
         }
     });
@@ -68,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     jh_probe.await.unwrap();
 
     let services = services.read().await;
-    for svc in services.iter() {
+    for svc in services.values() {
         let svc = svc.read().await;
         debug!("svc after hc: {:?}", svc);
     }

@@ -1,13 +1,13 @@
 use log::{debug, error};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
 use crate::kube::Service;
 
-pub(crate) async fn probe(svcs: Arc<RwLock<Vec<Arc<RwLock<Service>>>>>) {
+pub(crate) async fn probe(svcs: Arc<RwLock<HashMap<String, Arc<RwLock<Service>>>>>) {
     let svcs = svcs.read().await;
-    for svc in svcs.iter() {
+    for svc in svcs.values() {
         let svc = svc.clone();
         do_probe(svc).await;
     }
