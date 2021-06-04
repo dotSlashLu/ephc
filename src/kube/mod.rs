@@ -44,10 +44,10 @@ fn apply_svc(name: &str, yml: &str) -> Result<()> {
         }
     };
     let fname = format!("/tmp/ephc_{}_{}", t, name);
-    let mut file = std::fs::File::create(name)?;
+    let mut file = std::fs::File::create(&fname)?;
     file.write_all(yml.as_bytes())?;
 
-    exec(&format!("set -eo pipefail; kubectl apply -f {}", fname))?;
+    exec(&format!("set -eo pipefail; kubectl apply -f {}", &fname))?;
     Ok(())
 }
 

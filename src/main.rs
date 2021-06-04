@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 restore: 3,
                 remove: 3,
             };
-            let res = match kube::get_svcs(None, None, t) {
+            let res = match kube::get_svcs(Some(vec!["ephc-test"]), None, t) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
@@ -68,8 +68,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            // *svcs.write().await = res;
-            break;
         }
     });
 
@@ -79,8 +77,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             debug!("start probing");
+            let svcs = svcs.clone();
             probe::probe(svcs).await;
-            break;
+            debug!("finished probing");
         }
     });
 

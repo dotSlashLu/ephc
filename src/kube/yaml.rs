@@ -28,11 +28,12 @@ pub struct ServiceMetadataRepr {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ServiceRepr {
+    #[serde(rename = "apiVersion")]
     api_version: String,
     kind: String,
     pub metadata: ServiceMetadataRepr,
     pub subsets: Vec<SubsetRepr>,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     yaml: String,
 }
 
