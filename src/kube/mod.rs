@@ -1,96 +1,18 @@
 use crate::error::Result;
-use log::{debug, error, warn};
-use std::{str::FromStr, net::SocketAddr, process::Command, sync::Arc};
+use log::{debug, error};
+use std::time::SystemTime;
+use std::{io::Write, str::FromStr};
+use std::{process::Command, sync::Arc};
 use tokio::sync::RwLock;
 
+mod endpoint;
+mod service;
 mod yaml;
-use yaml::*;
 
-#[derive(Debug, Clone)]
-pub(crate) enum ServiceKind {
-    TCP,
-    UDP,
-}
+pub use endpoint::*;
+pub use service::*;
 
-impl FromStr for ServiceKind {
-    type Err = crate::error::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "TCP" => Ok(Self::TCP),
-            "UDP" => Ok(Self::UDP),
-            _ => Err(Self::Err::new("unknown service type")),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum EndpointStatus {
-    Healthy,
-    Removed,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Endpoint {
-    pub addr: SocketAddr,
-    pub status: EndpointStatus,
-    pub counter_up: u64,
-    pub counter_down: u64,
-}
-
-impl Endpoint {
-    pub fn reset_counter(&mut self) -> &Self {
-        self.counter_up = 0;
-        self.counter_down = 0;
-        self
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Service {
-    pub name: String,
-    pub kind: ServiceKind,
-    pub endpoints: Vec<Arc<RwLock<Endpoint>>>,
-    pub yaml: String,
-}
-
-impl Service {
-    // construct a Service from yaml
-    fn new(yml_str: String) -> Result<Option<Service>> {
-        let svc = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
-        let subsets: Vec<SubsetRepr> = svc.subsets;
-        let mut eps = Vec::<Arc<RwLock<Endpoint>>>::new();
-        for subset in subsets {
-            for port in &subset.ports {
-                if port.protocol == "UDP" {
-                    warn!("we don't support UDP for now");
-                    continue;
-                }
-
-                for addr in &subset.addresses {
-                    let addr = SocketAddr::from_str(&format!("{}:{}", addr.ip, port.port))?;
-                    let ep = Arc::new(RwLock::new(Endpoint {
-                        addr,
-                        status: EndpointStatus::Healthy,
-                        counter_up: 0,
-                        counter_down: 0,
-                    }));
-                    eps.push(ep);
-                }
-            }
-        }
-        if eps.len() == 0 {
-            return Ok(None);
-        }
-
-        Ok(Some(Service {
-            name: svc.metadata.name,
-            kind: ServiceKind::TCP,
-            endpoints: eps,
-            yaml: yml_str,
-        }))
-    }
-}
+use self::yaml::ServiceRepr;
 
 fn exec(cmdline: &str) -> Result<String> {
     let mut cmd = Command::new("bash");
@@ -113,28 +35,64 @@ fn exec(cmdline: &str) -> Result<String> {
     Ok(stdout)
 }
 
-pub(crate) fn get_svcs() -> Result<Vec<Service>> {
-    let names = get_svc_names()?;
-    let mut svcs = Vec::<Service>::new();
-    for n in names {
-        let svc = get_svc(n)?;
-        if svc.is_none() {
-            continue
+fn apply_svc(name: &str, yml: &str) -> Result<()> {
+    let t = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(n) => n.as_secs(),
+        Err(e) => {
+            error!("failed to get time: {}", e);
+            0
         }
-        svcs.push(svc.unwrap())
+    };
+    let fname = format!("/tmp/ephc_{}_{}", t, name);
+    let mut file = std::fs::File::create(&fname)?;
+    file.write_all(yml.as_bytes())?;
+
+    exec(&format!("set -eo pipefail; kubectl apply -f {}", &fname))?;
+    Ok(())
+}
+
+pub(crate) fn get_svcs(
+    allow: Option<Vec<&'static str>>,
+    block: Option<Vec<&'static str>>,
+    t: Threshold,
+) -> Result<Vec<Arc<RwLock<Service>>>> {
+    let names: Vec<String> = match allow {
+        Some(allow) => allow.iter().map(|n| (*n).to_owned()).collect(),
+        None => get_svc_names(block)?,
+    };
+    let mut svcs = Vec::<Arc<RwLock<Service>>>::new();
+    for n in names {
+        let svc = get_svc(n, t.clone())?;
+        if svc.is_none() {
+            continue;
+        }
+        svcs.push(Arc::new(RwLock::new(svc.unwrap())))
     }
     Ok(svcs)
 }
 
-fn get_svc_names() -> Result<Vec<String>> {
+fn get_svc_names(block: Option<Vec<&'static str>>) -> Result<Vec<String>> {
+    let block = match block {
+        Some(l) => l,
+        None => vec!["kubernetes"],
+    };
+
     let stdout = exec("set -eo pipefail; kubectl get svc | grep ClusterIP | gawk '{print $1}'")?;
-    let lines: Vec<String> = stdout.lines().map(|el| el.to_owned()).collect();
+    let mut lines: Vec<String> = stdout.lines().map(|el| el.to_owned()).collect();
+    lines.retain(|el| !block.contains(&&el[..]));
     Ok(lines)
 }
 
-fn get_svc(svc_name: String) -> Result<Option<Service>> {
-    let yml_str = exec(&format!("set -eo pipefail; kubectl get ep {} -o yaml", svc_name))?;
-    Service::new(yml_str)
+fn get_svc_repr(svc_name: &str) -> Result<String> {
+    exec(&format!(
+        "set -eo pipefail; kubectl get ep {} -o yaml",
+        svc_name
+    ))
+}
+
+fn get_svc(svc_name: String, t: Threshold) -> Result<Option<Service>> {
+    let yml_str = get_svc_repr(&svc_name)?;
+    Service::new(yml_str, t)
 }
 
 #[cfg(test)]
@@ -172,18 +130,22 @@ subsets:
 
     #[test]
     fn get_svc_names() {
-        super::get_svc_names();
+        super::get_svc_names(None);
     }
 
     #[test]
     fn service_from_str() {
-        let svc = super::ServiceRepr::from_str(YML_STR);
+        let svc = super::yaml::ServiceRepr::from_str(YML_STR);
         println!("{:?}", svc);
     }
 
     #[test]
     fn service_new() {
-        let svc = super::Service::new(String::from(YML_STR));
+        let threshold = super::Threshold {
+            restore: 3,
+            remove: 3,
+        };
+        let svc = super::Service::new(String::from(YML_STR), threshold);
         println!("{:?}", svc);
     }
 }
