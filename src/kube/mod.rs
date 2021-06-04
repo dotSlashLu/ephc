@@ -8,13 +8,13 @@ use tokio::sync::RwLock;
 mod yaml;
 use yaml::*;
 
-#[derive(Debug, Clone)]
-pub(crate) enum ServiceKind {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Protocol {
     TCP,
     UDP,
 }
 
-impl FromStr for ServiceKind {
+impl FromStr for Protocol {
     type Err = crate::error::Error;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
@@ -46,6 +46,7 @@ pub(crate) struct Counter {
 #[derive(Debug, Clone)]
 pub(crate) struct Endpoint {
     pub addr: SocketAddr,
+    pub protocol: Protocol,
     pub status: EndpointStatus,
     counter: Counter,
     threshold: Threshold,
@@ -87,11 +88,20 @@ impl Endpoint {
     }
 }
 
+impl std::cmp::PartialEq for Endpoint {
+    fn eq(&self, other: &Self) -> bool {
+        if self.addr == other.addr && self.protocol == other.protocol {
+            return true;
+        }
+        false
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Service {
     pub name: String,
-    pub kind: ServiceKind,
     pub endpoints: Vec<Endpoint>,
+    pub version: String,
     pub yaml: ServiceRepr,
 }
 
@@ -112,6 +122,7 @@ impl Service {
                     let addr = SocketAddr::from_str(&format!("{}:{}", addr.ip, port.port))?;
                     let ep = Endpoint {
                         addr,
+                        protocol: Protocol::from_str(&port.protocol)?,
                         status: EndpointStatus::Healthy,
                         counter: Counter { up: 0, down: 0 },
                         threshold: threshold.clone(),
@@ -124,11 +135,10 @@ impl Service {
             return Ok(None);
         }
 
-        let name = svc_repr.metadata.name.clone();
         Ok(Some(Service {
-            name: name,
-            kind: ServiceKind::TCP,
+            name: svc_repr.metadata.name,
             endpoints: eps,
+            version: svc_repr.metadata.resourceVersion,
             yaml: svc_repr,
         }))
     }

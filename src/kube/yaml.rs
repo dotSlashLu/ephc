@@ -1,7 +1,7 @@
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::string::ToString;
-use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddressRepr {
@@ -23,13 +23,14 @@ pub struct SubsetRepr {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceMetadataRepr {
     pub name: String,
+    pub resourceVersion: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceRepr {
     pub metadata: ServiceMetadataRepr,
     pub subsets: Vec<SubsetRepr>,
-    yaml: String
+    yaml: String,
 }
 
 impl FromStr for ServiceRepr {

@@ -1,5 +1,5 @@
 use log::{debug, error, info};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{
     sync::RwLock,
     time::{self, Duration},
@@ -20,7 +20,7 @@ const CONNECT_TIMEOUT: u64 = 100;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init();
 
-    let services = Arc::new(RwLock::new(vec![]));
+    let services = Arc::new(RwLock::new(HashMap::new()));
 
     // TODO: take from cli
     let refresh_interval = 1;
@@ -32,16 +32,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             info!("refresh service list");
-            let res = match kube::get_svcs(kube::Threshold {
+            let t = kube::Threshold {
                 restore: 3,
-                remove: 3
-            }) {
+                remove: 3,
+            };
+            let res = match kube::get_svcs(t) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
                     vec![]
                 }
             };
+            let svcs_reader = svcs.read().await;
+            for svc in res {
+                let svc = svc.read().await;
+                match svcs_reader.get(svc.name) {}
+            }
             *svcs.write().await = res;
             break;
         }
