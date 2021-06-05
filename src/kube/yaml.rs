@@ -63,25 +63,25 @@ mod test {
             api_version: "v1".to_owned(),
             kind: "Endpoints".to_owned(),
             metadata: ServiceMetadataRepr {
-                name: String::from_str("test").unwrap(),
-                resource_version: String::from_str("1").unwrap(),
+                name: "test".to_owned(),
+                resource_version: "1".to_owned(),
             },
             subsets: vec![SubsetRepr {
                 addresses: vec![AddressRepr {
-                    ip: String::from_str("1.1.1.1").unwrap(),
+                    ip: "1.1.1.1".to_owned(),
                 }],
                 ports: vec![
                     PortRepr {
                         port: 23,
-                        protocol: String::from_str("UDP").unwrap(),
+                        protocol: "UDP".to_owned(),
                     },
                     PortRepr {
                         port: 80,
-                        protocol: String::from_str("TCP").unwrap(),
+                        protocol: "TCP".to_owned(),
                     },
                 ],
             }],
-            yaml: String::from_str("s").unwrap(),
+            yaml: "s".to_owned(),
         };
         println!("{:?}", s.to_yaml());
     }

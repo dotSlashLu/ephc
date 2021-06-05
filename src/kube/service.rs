@@ -54,12 +54,11 @@ impl Service {
         }))
     }
 
-    // remove ep and return new version
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
         let mut ep = &mut self.endpoints[i];
         let ep_addr = ep.addr;
         debug!("should remove ep: {:?}", ep_addr);
-        ep.status = EndpointStatus::Removed;
+
         let ep_ip = ep_addr.ip();
         for subset in &mut self.yaml.subsets {
             subset.addresses.retain(|addr| {
@@ -76,16 +75,41 @@ impl Service {
                 true
             });
         }
+
         let yml = self.yaml.to_yaml()?;
         super::apply_svc(&self.name, &yml)?;
         let yml = super::get_svc_repr(&self.name)?;
         let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
         self.our_version = new_svc.metadata.resource_version;
+
+        ep.reset_counter();
+        ep.status = EndpointStatus::Removed;
+
         debug!("ep removed, new version: {:?}", self.our_version);
         Ok(())
     }
 
-    pub fn restore_ep(&mut self, i: usize) {
-        debug!("should restore ep: {:?}", self.endpoints[i]);
+    pub fn restore_ep(&mut self, i: usize) -> Result<()> {
+        let mut ep = &mut self.endpoints[i];
+        let ep_addr = ep.addr;
+        debug!("should restore ep: {:?}", ep_addr);
+
+        let ep_ip = ep_addr.ip();
+        // XXX: does all eps only contain one subsets?
+        self.yaml.subsets[0].addresses.push(AddressRepr {
+            ip: ep_ip.to_string(),
+        });
+
+        let yml = self.yaml.to_yaml()?;
+        super::apply_svc(&self.name, &yml)?;
+        let yml = super::get_svc_repr(&self.name)?;
+        let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
+        self.our_version = new_svc.metadata.resource_version;
+
+        ep.reset_counter();
+        ep.status = EndpointStatus::Healthy;
+
+        debug!("ep restored, new version: {:?}", self.our_version);
+        Ok(())
     }
 }

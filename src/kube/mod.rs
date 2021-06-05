@@ -1,9 +1,9 @@
 use crate::error::Result;
-use log::{debug, error};
+use log::error;
+use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::{io::Write, str::FromStr};
 use tokio::sync::RwLock;
 
 mod endpoint;
@@ -12,8 +12,6 @@ mod yaml;
 
 pub use endpoint::*;
 pub use service::*;
-
-use self::yaml::ServiceRepr;
 
 fn exec(cmdline: &str) -> Result<String> {
     let mut cmd = Command::new("bash");
@@ -136,7 +134,7 @@ subsets:
 
     #[test]
     fn get_svc_names() {
-        super::get_svc_names(None);
+        super::get_svc_names(None).unwrap();
     }
 
     #[test]

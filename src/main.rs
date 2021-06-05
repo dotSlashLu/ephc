@@ -9,10 +9,6 @@ mod error;
 mod kube;
 mod probe;
 
-// how many ups will be re-added to ep
-const HEALTHY_UPS: u8 = 1;
-// how many downs will be removed from ep
-const REMOVED_DOWNS: u8 = 3;
 // ms to consider an ep is down
 const CONNECT_TIMEOUT: u64 = 100;
 
@@ -107,12 +103,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     jh_refresh.await.unwrap();
     jh_probe.await.unwrap();
-
-    let services = services.read().await;
-    for svc in services.values() {
-        let svc = svc.read().await;
-        debug!("svc after hc: {:?}", svc);
-    }
 
     Ok(())
 }
