@@ -23,6 +23,7 @@ pub struct SubsetRepr {
 #[serde(rename_all = "camelCase")]
 pub struct ServiceMetadataRepr {
     pub name: String,
+    #[serde(skip_serializing)]
     pub resource_version: String,
 }
 

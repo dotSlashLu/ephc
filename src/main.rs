@@ -53,13 +53,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Some(old) => {
                         let old = old.clone();
                         let old_reader = old.read().await;
-                        if old_reader.our_version == svc_reader.our_version {
+                        let version = svc_reader.our_version.parse::<u64>().unwrap_or_else(|e| {
+                            debug!("failed to parse new resourceVersion: {}", e);
+                            0
+                        });
+                        let old_version =
+                            old_reader.our_version.parse::<u64>().unwrap_or_else(|e| {
+                                debug!("failed to parse old resourceVersion: {}", e);
+                                0
+                            });
+
+                        if version == old_version {
                             debug!("service {} not changed", svc_reader.name);
                             continue;
                         }
-                        debug!(
+                        if version < old_version {
+                            error!(
+                                "service {} got version {} under our version {}",
+                                svc_reader.name, version, old_version
+                            );
+                            continue;
+                        }
+
+                        info!(
                             "service {} changed from outside, replacing",
                             svc_reader.name
+                        );
+                        debug!(
+                            "new version: {}, our version: {}",
+                            svc_reader.our_version, old_reader.our_version
                         );
                         svcs_writer.insert(svc_reader.name.clone(), svc);
                     }

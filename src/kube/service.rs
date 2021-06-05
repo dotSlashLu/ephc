@@ -56,9 +56,11 @@ impl Service {
 
     // remove ep and return new version
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
-        let ep = self.endpoints[i].addr;
-        debug!("should remove ep: {:?}", ep);
-        let ep_ip = ep.ip();
+        let mut ep = &mut self.endpoints[i];
+        let ep_addr = ep.addr;
+        debug!("should remove ep: {:?}", ep_addr);
+        ep.status = EndpointStatus::Removed;
+        let ep_ip = ep_addr.ip();
         for subset in &mut self.yaml.subsets {
             subset.addresses.retain(|addr| {
                 let ip = match std::net::IpAddr::from_str(&addr.ip) {
@@ -75,10 +77,11 @@ impl Service {
             });
         }
         let yml = self.yaml.to_yaml()?;
-        super::apply_svc(&self.name, &yml);
+        super::apply_svc(&self.name, &yml)?;
         let yml = super::get_svc_repr(&self.name)?;
         let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
         self.our_version = new_svc.metadata.resource_version;
+        debug!("ep removed, new version: {:?}", self.our_version);
         Ok(())
     }
 
