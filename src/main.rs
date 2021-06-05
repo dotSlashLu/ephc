@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 restore: 3,
                 remove: 3,
             };
-            let res = match kube::get_svcs(None, None, t) {
+            let res = match kube::get_svcs(Some(vec!["ephc-test"]), None, t) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);

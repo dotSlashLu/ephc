@@ -76,7 +76,6 @@ impl Service {
                 true
             });
         }
-        self.endpoints.remove(i);
         let yml = self.yaml.to_yaml()?;
         super::apply_svc(&self.name, &yml)?;
         let yml = super::get_svc_repr(&self.name)?;
