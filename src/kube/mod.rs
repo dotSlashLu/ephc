@@ -1,8 +1,9 @@
 use crate::error::Result;
 use log::{debug, error};
+use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::{io::Write, str::FromStr};
-use std::{process::Command, sync::Arc};
 use tokio::sync::RwLock;
 
 mod endpoint;
@@ -18,13 +19,18 @@ fn exec(cmdline: &str) -> Result<String> {
     let mut cmd = Command::new("bash");
     let cmd = cmd.arg("-c").arg(cmdline);
 
-    let status = cmd.status()?;
-    debug!("command status: {:?}", status);
-    let output = cmd.output().expect("failed to execute process");
+    let output = cmd
+        .stdout(Stdio::piped())
+        .output()
+        .expect("failed to execute process");
 
+    let status = cmd.status()?;
     if !status.success() {
         let err = String::from_utf8_lossy(&output.stderr[..]);
-        error!("failed to run cmd: {}", err);
+        error!(
+            "failed to run cmd: exit status: {}, stderr: {}",
+            status, err
+        );
         return Err(crate::error::Error::from(std::io::Error::new(
             std::io::ErrorKind::Other,
             err,
@@ -44,10 +50,10 @@ fn apply_svc(name: &str, yml: &str) -> Result<()> {
         }
     };
     let fname = format!("/tmp/ephc_{}_{}", t, name);
-    let mut file = std::fs::File::create(name)?;
+    let mut file = std::fs::File::create(&fname)?;
     file.write_all(yml.as_bytes())?;
 
-    exec(&format!("set -eo pipefail; kubectl apply -f {}", fname))?;
+    exec(&format!("set -eo pipefail; kubectl apply -f {}", &fname))?;
     Ok(())
 }
 

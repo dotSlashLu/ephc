@@ -36,7 +36,7 @@ async fn do_probe(svc: Arc<RwLock<Service>>) {
                         Ok(_) => {
                             debug!("{:?} connected", ep.addr);
                             if ep.up() {
-                                svc.remove_ep(i);
+                                svc.restore_ep(i);
                             }
                         }
                         Err(e) => {
@@ -64,7 +64,7 @@ async fn do_probe(svc: Arc<RwLock<Service>>) {
             let mut svc_clone = svc_clone.write().await;
             let ep = &mut svc_clone.endpoints[i];
             error!("failed to connect to {:?}: timed out", ep);
-            let remove =  ep.down();
+            let remove = ep.down();
             if remove {
                 drop(ep);
             }
@@ -76,8 +76,8 @@ async fn do_probe(svc: Arc<RwLock<Service>>) {
 #[cfg(test)]
 mod tests {
     use crate::kube;
-    use std::{net::SocketAddr, str::FromStr, sync::Arc};
     use kube::Threshold;
+    use std::{net::SocketAddr, str::FromStr, sync::Arc};
     use tokio::sync::RwLock;
 
     // #[tokio::test]
