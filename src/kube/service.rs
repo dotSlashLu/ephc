@@ -95,7 +95,7 @@ impl Service {
         debug!("should restore ep: {:?}", ep_addr);
 
         let ep_ip = ep_addr.ip();
-        // XXX: does all eps only contain one subsets?
+        // TODO: does all eps only contain one subsets?
         self.yaml.subsets[0].addresses.push(AddressRepr {
             ip: ep_ip.to_string(),
         });

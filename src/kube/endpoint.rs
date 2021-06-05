@@ -50,13 +50,13 @@ impl Endpoint {
         match self.status {
             EndpointStatus::Removed => {
                 self.counter.up += 1;
-                return if self.counter.up >= self.threshold.restore {
-                    true
-                } else {
-                    false
-                };
+                self.counter.up >= self.threshold.restore
             }
-            _ => false,
+            _ => {
+                // clear previous down counter
+                self.counter.down = 0;
+                false
+            }
         }
     }
 
@@ -64,13 +64,13 @@ impl Endpoint {
         match self.status {
             EndpointStatus::Healthy => {
                 self.counter.down += 1;
-                return if self.counter.down >= self.threshold.remove {
-                    true
-                } else {
-                    false
-                };
+                self.counter.down >= self.threshold.remove
             }
-            _ => false,
+            _ => {
+                // clear previous up counter
+                self.counter.up = 0;
+                false
+            }
         }
     }
 
