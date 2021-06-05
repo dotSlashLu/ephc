@@ -61,14 +61,13 @@ async fn do_probe(svc: Arc<RwLock<Service>>) {
         let res = join_res.unwrap();
         if res.is_err() {
             let svc_clone = svc.clone();
-            let mut svc_clone = svc_clone.write().await;
-            let ep = &mut svc_clone.endpoints[i];
+            let mut svc_w = svc_clone.write().await;
+            let ep = &mut svc_w.endpoints[i];
             error!("failed to connect to {:?}: timed out", ep);
             let remove = ep.down();
             if remove {
-                drop(ep);
+                svc_w.remove_ep(i);
             }
-            svc_clone.remove_ep(i);
         }
     }
 }
