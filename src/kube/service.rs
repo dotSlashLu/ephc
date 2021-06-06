@@ -55,6 +55,7 @@ impl Service {
         }))
     }
 
+    // TODO: does all eps only contain one subset?
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
         // let mut ep = &mut self.endpoints[i];
         let ep_addr = &self.endpoints[i].addr;
@@ -72,14 +73,7 @@ impl Service {
 
         // if the last ep is going to be removed, meaning every ep is unhealthy,
         // restore all in k8s for quicker restoration
-        if self
-            .endpoints
-            .iter()
-            .filter(|ep| ep.status == EndpointStatus::Healthy)
-            .collect::<Vec<&Endpoint>>()
-            .len()
-            == 1
-        {
+        if self.repr.subsets[0].addresses.len() == 1 {
             self.endpoints[i].status = EndpointStatus::Removed;
             super::apply_svc(&self.name, &self.repr.yaml)?;
             info!("all ep marked as removed, restored all eps");
@@ -120,13 +114,13 @@ impl Service {
         Ok(())
     }
 
+    // TODO: does all eps only contain one subsets
     pub fn restore_ep(&mut self, i: usize) -> Result<()> {
         let mut ep = &mut self.endpoints[i];
         let ep_addr = ep.addr;
         info!("restoring ep: {:?}", ep_addr);
 
         let ep_ip = ep_addr.ip();
-        // TODO: does all eps only contain one subsets?
         // ep was marked down without changing repr, just mark it will do
         if self.repr.subsets[0].addresses.contains(&AddressRepr {
             ip: ep_ip.to_string(),
