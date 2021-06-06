@@ -80,7 +80,8 @@ impl Service {
             info!("all eps marked as removed, restoring all eps in k8s");
             self.endpoints[i].status = EndpointStatus::Removed;
             let original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
-            super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
+            let new_version = super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
+            self.our_version = new_version;
             return Ok(());
         }
 
@@ -102,10 +103,8 @@ impl Service {
         }
 
         let yml = self.repr.to_yaml()?;
-        super::apply_svc(&self.name, &yml)?;
-        let yml = super::get_svc_repr(&self.name)?;
-        let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
-        self.our_version = new_svc.metadata.resource_version;
+        let new_version = super::apply_svc(&self.name, &yml)?;
+        self.our_version = new_version;
 
         let ep = &mut self.endpoints[i];
         ep.reset_counter();
@@ -140,10 +139,8 @@ impl Service {
         });
 
         let yml = self.repr.to_yaml()?;
-        super::apply_svc(&self.name, &yml)?;
-        let yml = super::get_svc_repr(&self.name)?;
-        let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
-        self.our_version = new_svc.metadata.resource_version;
+        let new_version = super::apply_svc(&self.name, &yml)?;
+        self.our_version = new_version;
 
         ep.reset_counter();
         ep.status = EndpointStatus::Healthy;

@@ -2,6 +2,7 @@ use crate::error::Result;
 use log::error;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
@@ -39,7 +40,7 @@ fn exec(cmdline: &str) -> Result<String> {
     Ok(stdout)
 }
 
-fn apply_svc(name: &str, yml: &str) -> Result<()> {
+fn apply_svc(name: &str, yml: &str) -> Result<String> {
     let t = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(n) => n.as_secs(),
         Err(e) => {
@@ -52,7 +53,24 @@ fn apply_svc(name: &str, yml: &str) -> Result<()> {
     file.write_all(yml.as_bytes())?;
 
     exec(&format!("set -eo pipefail; kubectl apply -f {}", &fname))?;
-    Ok(())
+
+    // get new version after apply
+    // all errors are not propagated
+    let yml = match get_svc_repr(name) {
+        Err(e) => {
+            error!("failed to get service repr for {}: {}", name, e);
+            return Ok("0".to_owned());
+        }
+        Ok(yml) => yml,
+    };
+    let new_svc = match yaml::ServiceRepr::from_str(&yml) {
+        Ok(repr) => repr,
+        Err(e) => {
+            error!("failed to parse yaml for repr {}: {}", name, e);
+            return Ok("0".to_owned());
+        }
+    };
+    Ok(new_svc.metadata.resource_version)
 }
 
 pub(crate) fn get_svcs(
