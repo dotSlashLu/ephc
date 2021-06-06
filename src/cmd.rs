@@ -51,8 +51,8 @@ pub(crate) fn init() -> AppOpt {
                 .value_name("REFRESH_INTERVAL")
                 .required(false)
                 .takes_value(true)
-                .default_value("1")
-                .help("Interval to refresh service from k8s"),
+                .default_value(DEFAULT_REFRESH_INTERVAL)
+                .help("Interval in seconds to refresh service from k8s"),
         )
         .arg(
             Arg::with_name("probe_interval")
@@ -61,8 +61,8 @@ pub(crate) fn init() -> AppOpt {
                 .value_name("PROBE_INTERVAL")
                 .required(false)
                 .takes_value(true)
-                .default_value("1")
-                .help("Interval to probe services"),
+                .default_value(DEFAULT_PROBE_INTERVAL)
+                .help("Interval in milliseconds to probe services"),
         )
         .arg(
             Arg::with_name("connection_timeout")
@@ -81,7 +81,7 @@ pub(crate) fn init() -> AppOpt {
                 .value_name("REMOVE")
                 .required(false)
                 .takes_value(true)
-                .default_value("3")
+                .default_value(DEFAULT_REMOVE)
                 .help("How many times an endpoint failed probing should be removed"),
         )
         .arg(
@@ -91,7 +91,7 @@ pub(crate) fn init() -> AppOpt {
                 .value_name("RESTORE")
                 .required(false)
                 .takes_value(true)
-                .default_value("3")
+                .default_value(DEFAULT_RESTORE)
                 .help("How many times an endpoint removed successfully probed should be restored"),
         )
         .get_matches();
