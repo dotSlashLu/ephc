@@ -1,5 +1,5 @@
 use crate::error::Result;
-use log::{debug, error, warn};
+use log::{error, info, warn};
 use std::{net::SocketAddr, str::FromStr};
 
 use super::endpoint::*;
@@ -20,7 +20,8 @@ pub(crate) struct Service {
 impl Service {
     // construct a Service from yaml
     pub fn new(yml_str: String, threshold: Threshold) -> Result<Option<Self>> {
-        let svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
+        let mut svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
+        svc_repr.yaml = yml_str;
         let subsets: &Vec<SubsetRepr> = &svc_repr.subsets;
         let mut eps = Vec::<Endpoint>::new();
         for subset in subsets {
@@ -55,14 +56,14 @@ impl Service {
         }))
     }
 
+    // TODO: does all eps only contain one subset?
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
-        // let mut ep = &mut self.endpoints[i];
         let ep_addr = &self.endpoints[i].addr;
-        debug!("should remove ep: {:?}", ep_addr);
+        info!("removing ep: {:?}", ep_addr);
 
         // if there're only one ep, do nothing except mark it
         if self.endpoints.len() <= 1 {
-            debug!(
+            info!(
                 "{} is the only ep, do nothing except marking it unhealthy",
                 ep_addr
             );
@@ -71,17 +72,16 @@ impl Service {
         }
 
         // if the last ep is going to be removed, meaning every ep is unhealthy,
-        // restore all in k8s for quicker restoration
-        if self
-            .endpoints
-            .iter()
-            .filter(|ep| ep.status == EndpointStatus::Healthy)
-            .collect::<Vec<&Endpoint>>()
-            .len()
-            == 1
-        {
+        // restore all original eps in k8s for quicker restoration
+        //
+        // TODO: right now, when only part of the eps are up, the remaining down
+        //  eps still remains in k8s
+        if self.repr.subsets[0].addresses.len() == 1 {
+            info!("all eps marked as removed, restoring all eps in k8s");
             self.endpoints[i].status = EndpointStatus::Removed;
-            super::apply_svc(&self.name, &self.repr.yaml)?;
+            let original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
+            let new_version = super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
+            self.our_version = new_version;
             return Ok(());
         }
 
@@ -103,40 +103,49 @@ impl Service {
         }
 
         let yml = self.repr.to_yaml()?;
-        super::apply_svc(&self.name, &yml)?;
-        let yml = super::get_svc_repr(&self.name)?;
-        let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
-        self.our_version = new_svc.metadata.resource_version;
+        let new_version = super::apply_svc(&self.name, &yml)?;
+        self.our_version = new_version;
 
         let ep = &mut self.endpoints[i];
         ep.reset_counter();
         ep.status = EndpointStatus::Removed;
 
-        debug!("ep removed, new version: {:?}", self.our_version);
+        info!(
+            "ep {} removed, new version: {:?}",
+            ep.addr, self.our_version
+        );
         Ok(())
     }
 
+    // TODO: does all eps only contain one subsets
     pub fn restore_ep(&mut self, i: usize) -> Result<()> {
         let mut ep = &mut self.endpoints[i];
         let ep_addr = ep.addr;
-        debug!("should restore ep: {:?}", ep_addr);
+        info!("restoring ep: {:?}", ep_addr);
 
         let ep_ip = ep_addr.ip();
-        // TODO: does all eps only contain one subsets?
+        // ep was marked down without changing repr, just mark it will do
+        if self.repr.subsets[0].addresses.contains(&AddressRepr {
+            ip: ep_ip.to_string(),
+        }) {
+            ep.reset_counter();
+            ep.status = EndpointStatus::Healthy;
+            info!("ep {} restored without changing k8s", ep_ip);
+            return Ok(());
+        }
+
         self.repr.subsets[0].addresses.push(AddressRepr {
             ip: ep_ip.to_string(),
         });
 
         let yml = self.repr.to_yaml()?;
-        super::apply_svc(&self.name, &yml)?;
-        let yml = super::get_svc_repr(&self.name)?;
-        let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
-        self.our_version = new_svc.metadata.resource_version;
+        let new_version = super::apply_svc(&self.name, &yml)?;
+        self.our_version = new_version;
 
         ep.reset_counter();
         ep.status = EndpointStatus::Healthy;
 
-        debug!("ep restored, new version: {:?}", self.our_version);
+        info!("ep {} restored, new version: {:?}", ep_ip, self.our_version);
         Ok(())
     }
 }

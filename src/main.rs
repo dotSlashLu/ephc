@@ -5,36 +5,31 @@ use tokio::{
     time::{self, Duration},
 };
 
+mod cmd;
 mod error;
 mod kube;
 mod probe;
 
-// ms to consider an ep is down
-const CONNECT_TIMEOUT: u64 = 100;
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    init();
+    let opt = cmd::init();
 
     let services = Arc::new(RwLock::new(
         HashMap::<String, Arc<RwLock<kube::Service>>>::new(),
     ));
 
-    // TODO: take from cli
-    let refresh_interval = 1;
-    let probe_interval = 1000;
-
     let svcs = services.clone();
-    let mut interval = time::interval(Duration::from_secs(refresh_interval));
+    let mut interval = time::interval(Duration::from_secs(opt.refresh_interval));
+    let opt_clone = opt.clone();
     let jh_refresh = tokio::task::spawn(async move {
         loop {
             interval.tick().await;
             info!("refresh service list");
             let t = kube::Threshold {
-                restore: 3,
-                remove: 3,
+                restore: opt_clone.restore,
+                remove: opt_clone.remove,
             };
-            let res = match kube::get_svcs(Some(vec!["ephc-test"]), None, t) {
+            let res = match kube::get_svcs(&opt_clone.allow_list, &opt_clone.block_list, t) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
@@ -90,13 +85,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let svcs = services.clone();
+    let probe_interval = opt.probe_interval;
     let mut interval = time::interval(Duration::from_millis(probe_interval));
     let jh_probe = tokio::task::spawn(async move {
         loop {
             interval.tick().await;
             debug!("start probing");
             let svcs = svcs.clone();
-            probe::probe(svcs).await;
+            probe::probe(svcs, opt.connection_timeout).await;
             debug!("finished probing");
         }
     });
@@ -105,8 +101,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     jh_probe.await.unwrap();
 
     Ok(())
-}
-
-fn init() {
-    env_logger::init();
 }
