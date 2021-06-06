@@ -2,7 +2,7 @@ use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AddressRepr {
     pub ip: String,
 }

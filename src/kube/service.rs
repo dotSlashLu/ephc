@@ -1,5 +1,5 @@
 use crate::error::Result;
-use log::{debug, error, warn};
+use log::{error, info, warn};
 use std::{net::SocketAddr, str::FromStr};
 
 use super::endpoint::*;
@@ -58,11 +58,11 @@ impl Service {
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
         // let mut ep = &mut self.endpoints[i];
         let ep_addr = &self.endpoints[i].addr;
-        debug!("should remove ep: {:?}", ep_addr);
+        info!("removing ep: {:?}", ep_addr);
 
         // if there're only one ep, do nothing except mark it
         if self.endpoints.len() <= 1 {
-            debug!(
+            info!(
                 "{} is the only ep, do nothing except marking it unhealthy",
                 ep_addr
             );
@@ -82,6 +82,7 @@ impl Service {
         {
             self.endpoints[i].status = EndpointStatus::Removed;
             super::apply_svc(&self.name, &self.repr.yaml)?;
+            info!("all ep marked as removed, restored all eps");
             return Ok(());
         }
 
@@ -112,17 +113,30 @@ impl Service {
         ep.reset_counter();
         ep.status = EndpointStatus::Removed;
 
-        debug!("ep removed, new version: {:?}", self.our_version);
+        info!(
+            "ep {} removed, new version: {:?}",
+            ep.addr, self.our_version
+        );
         Ok(())
     }
 
     pub fn restore_ep(&mut self, i: usize) -> Result<()> {
         let mut ep = &mut self.endpoints[i];
         let ep_addr = ep.addr;
-        debug!("should restore ep: {:?}", ep_addr);
+        info!("restoring ep: {:?}", ep_addr);
 
         let ep_ip = ep_addr.ip();
         // TODO: does all eps only contain one subsets?
+        // ep was marked down without changing repr, just mark it will do
+        if self.repr.subsets[0].addresses.contains(&AddressRepr {
+            ip: ep_ip.to_string(),
+        }) {
+            ep.reset_counter();
+            ep.status = EndpointStatus::Healthy;
+            info!("ep {} restored without changing k8s", ep_ip);
+            return Ok(());
+        }
+
         self.repr.subsets[0].addresses.push(AddressRepr {
             ip: ep_ip.to_string(),
         });
@@ -136,7 +150,7 @@ impl Service {
         ep.reset_counter();
         ep.status = EndpointStatus::Healthy;
 
-        debug!("ep restored, new version: {:?}", self.our_version);
+        info!("ep {} restored, new version: {:?}", ep_ip, self.our_version);
         Ok(())
     }
 }
