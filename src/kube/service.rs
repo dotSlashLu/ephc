@@ -79,8 +79,7 @@ impl Service {
         if self.repr.subsets[0].addresses.len() == 1 {
             info!("all eps marked as removed, restoring all eps in k8s");
             self.endpoints[i].status = EndpointStatus::Removed;
-            let mut original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
-            original_repr.unset_api_version();
+            let original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
             super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
             return Ok(());
         }
