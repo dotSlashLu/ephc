@@ -51,6 +51,10 @@ impl ServiceRepr {
         let yaml = serde_yaml::to_string(self)?;
         Ok(yaml)
     }
+
+    pub fn unset_api_version(&mut self) {
+        self.api_version = "".to_owned();
+    }
 }
 
 #[cfg(test)]

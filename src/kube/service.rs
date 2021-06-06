@@ -20,7 +20,8 @@ pub(crate) struct Service {
 impl Service {
     // construct a Service from yaml
     pub fn new(yml_str: String, threshold: Threshold) -> Result<Option<Self>> {
-        let svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
+        let mut svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
+        svc_repr.yaml = yml_str;
         let subsets: &Vec<SubsetRepr> = &svc_repr.subsets;
         let mut eps = Vec::<Endpoint>::new();
         for subset in subsets {
@@ -57,7 +58,6 @@ impl Service {
 
     // TODO: does all eps only contain one subset?
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
-        // let mut ep = &mut self.endpoints[i];
         let ep_addr = &self.endpoints[i].addr;
         info!("removing ep: {:?}", ep_addr);
 
@@ -72,11 +72,16 @@ impl Service {
         }
 
         // if the last ep is going to be removed, meaning every ep is unhealthy,
-        // restore all in k8s for quicker restoration
+        // restore all original eps in k8s for quicker restoration
+        //
+        // TODO: right now, when only part of the eps are up, the remaining down
+        //  eps still remains in k8s
         if self.repr.subsets[0].addresses.len() == 1 {
+            info!("all eps marked as removed, restoring all eps in k8s");
             self.endpoints[i].status = EndpointStatus::Removed;
-            super::apply_svc(&self.name, &self.repr.yaml)?;
-            info!("all ep marked as removed, restored all eps");
+            let mut original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
+            original_repr.unset_api_version();
+            super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
             return Ok(());
         }
 
