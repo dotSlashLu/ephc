@@ -1,8 +1,8 @@
 use clap::{App, Arg};
 
 const DEFAULT_REFRESH_INTERVAL: &str = "1";
-const DEFAULT_PROBE_INTERVAL: &str = "100";
-const DEFAULT_CONNECT_TIMEOUT: &str = "1000";
+const DEFAULT_PROBE_INTERVAL: &str = "1000";
+const DEFAULT_CONNECT_TIMEOUT: &str = "100";
 const DEFAULT_RESTORE: &str = "3";
 const DEFAULT_REMOVE: &str = "3";
 
