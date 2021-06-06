@@ -56,8 +56,8 @@ fn apply_svc(name: &str, yml: &str) -> Result<()> {
 }
 
 pub(crate) fn get_svcs(
-    allow: Option<Vec<&'static str>>,
-    block: Option<Vec<&'static str>>,
+    allow: &Option<Vec<String>>,
+    block: &Option<Vec<String>>,
     t: Threshold,
 ) -> Result<Vec<Arc<RwLock<Service>>>> {
     let names: Vec<String> = match allow {
@@ -75,15 +75,16 @@ pub(crate) fn get_svcs(
     Ok(svcs)
 }
 
-fn get_svc_names(block: Option<Vec<&'static str>>) -> Result<Vec<String>> {
+fn get_svc_names(block: &Option<Vec<String>>) -> Result<Vec<String>> {
+    let default_block_list = &vec!["kubernetes".to_owned()];
     let block = match block {
         Some(l) => l,
-        None => vec!["kubernetes"],
+        None => default_block_list,
     };
 
     let stdout = exec("set -eo pipefail; kubectl get svc | grep ClusterIP | gawk '{print $1}'")?;
     let mut lines: Vec<String> = stdout.lines().map(|el| el.to_owned()).collect();
-    lines.retain(|el| !block.contains(&&el[..]));
+    lines.retain(|el| !block.contains(el));
     Ok(lines)
 }
 
@@ -134,7 +135,7 @@ subsets:
 
     #[test]
     fn get_svc_names() {
-        super::get_svc_names(None).unwrap();
+        super::get_svc_names(&None).unwrap();
     }
 
     #[test]

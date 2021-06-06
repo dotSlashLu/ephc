@@ -5,15 +5,18 @@ use tokio::task::JoinHandle;
 
 use crate::kube::Service;
 
-pub(crate) async fn probe(svcs: Arc<RwLock<HashMap<String, Arc<RwLock<Service>>>>>) {
+pub(crate) async fn probe(
+    svcs: Arc<RwLock<HashMap<String, Arc<RwLock<Service>>>>>,
+    connect_timeout: u64,
+) {
     let svcs = svcs.read().await;
     for svc in svcs.values() {
         let svc = svc.clone();
-        probe_svc(svc).await;
+        probe_svc(svc, connect_timeout).await;
     }
 }
 
-async fn probe_svc(svc: Arc<RwLock<Service>>) {
+async fn probe_svc(svc: Arc<RwLock<Service>>, connect_timeout: u64) {
     let mut jhs = Vec::<(JoinHandle<_>, usize)>::new();
 
     let l = {
@@ -27,7 +30,7 @@ async fn probe_svc(svc: Arc<RwLock<Service>>) {
 
         jhs.push((
             tokio::spawn(tokio::time::timeout(
-                std::time::Duration::from_millis(crate::CONNECT_TIMEOUT),
+                std::time::Duration::from_millis(connect_timeout),
                 async move {
                     let mut svc = svc_clone.write().await;
                     let ep = &mut svc.endpoints[i];
