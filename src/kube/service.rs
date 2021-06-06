@@ -13,7 +13,8 @@ pub(crate) struct Service {
     // means this service has been changed from outside and all members need
     // to be refreshed
     pub our_version: String,
-    pub yaml: ServiceRepr,
+    // yaml representation of the service
+    pub repr: ServiceRepr,
 }
 
 impl Service {
@@ -50,17 +51,42 @@ impl Service {
             name: svc_repr.metadata.name.clone(),
             endpoints: eps,
             our_version: svc_repr.metadata.resource_version.clone(),
-            yaml: svc_repr,
+            repr: svc_repr,
         }))
     }
 
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
-        let mut ep = &mut self.endpoints[i];
-        let ep_addr = ep.addr;
+        // let mut ep = &mut self.endpoints[i];
+        let ep_addr = &self.endpoints[i].addr;
         debug!("should remove ep: {:?}", ep_addr);
 
+        // if there're only one ep, do nothing except mark it
+        if self.endpoints.len() <= 1 {
+            debug!(
+                "{} is the only ep, do nothing except marking it unhealthy",
+                ep_addr
+            );
+            self.endpoints[i].status = EndpointStatus::Removed;
+            return Ok(());
+        }
+
+        // if the last ep is going to be removed, meaning every ep is unhealthy,
+        // restore all in k8s for quicker restoration
+        if self
+            .endpoints
+            .iter()
+            .filter(|ep| ep.status == EndpointStatus::Healthy)
+            .collect::<Vec<&Endpoint>>()
+            .len()
+            == 1
+        {
+            self.endpoints[i].status = EndpointStatus::Removed;
+            super::apply_svc(&self.name, &self.repr.yaml)?;
+            return Ok(());
+        }
+
         let ep_ip = ep_addr.ip();
-        for subset in &mut self.yaml.subsets {
+        for subset in &mut self.repr.subsets {
             subset.addresses.retain(|addr| {
                 let ip = match std::net::IpAddr::from_str(&addr.ip) {
                     Ok(ip) => ip,
@@ -76,12 +102,13 @@ impl Service {
             });
         }
 
-        let yml = self.yaml.to_yaml()?;
+        let yml = self.repr.to_yaml()?;
         super::apply_svc(&self.name, &yml)?;
         let yml = super::get_svc_repr(&self.name)?;
         let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;
         self.our_version = new_svc.metadata.resource_version;
 
+        let ep = &mut self.endpoints[i];
         ep.reset_counter();
         ep.status = EndpointStatus::Removed;
 
@@ -96,11 +123,11 @@ impl Service {
 
         let ep_ip = ep_addr.ip();
         // TODO: does all eps only contain one subsets?
-        self.yaml.subsets[0].addresses.push(AddressRepr {
+        self.repr.subsets[0].addresses.push(AddressRepr {
             ip: ep_ip.to_string(),
         });
 
-        let yml = self.yaml.to_yaml()?;
+        let yml = self.repr.to_yaml()?;
         super::apply_svc(&self.name, &yml)?;
         let yml = super::get_svc_repr(&self.name)?;
         let new_svc = super::yaml::ServiceRepr::from_str(&yml)?;

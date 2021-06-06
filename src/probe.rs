@@ -9,11 +9,11 @@ pub(crate) async fn probe(svcs: Arc<RwLock<HashMap<String, Arc<RwLock<Service>>>
     let svcs = svcs.read().await;
     for svc in svcs.values() {
         let svc = svc.clone();
-        do_probe(svc).await;
+        probe_svc(svc).await;
     }
 }
 
-async fn do_probe(svc: Arc<RwLock<Service>>) {
+async fn probe_svc(svc: Arc<RwLock<Service>>) {
     let mut jhs = Vec::<(JoinHandle<_>, usize)>::new();
 
     let l = {

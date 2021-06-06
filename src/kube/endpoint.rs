@@ -18,7 +18,7 @@ impl FromStr for Protocol {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum EndpointStatus {
     Healthy,
     Removed,

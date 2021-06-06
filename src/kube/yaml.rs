@@ -35,7 +35,7 @@ pub(crate) struct ServiceRepr {
     pub metadata: ServiceMetadataRepr,
     pub subsets: Vec<SubsetRepr>,
     #[serde(skip)]
-    yaml: String,
+    pub yaml: String,
 }
 
 impl FromStr for ServiceRepr {
