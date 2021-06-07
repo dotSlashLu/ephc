@@ -9,6 +9,7 @@ pub struct AddressRepr {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortRepr {
+    name: String,
     pub port: u32,
     pub protocol: String,
 }
@@ -72,10 +73,12 @@ mod test {
                 }],
                 ports: vec![
                     PortRepr {
+                        name: "23".to_owned(),
                         port: 23,
                         protocol: "UDP".to_owned(),
                     },
                     PortRepr {
+                        name: "23".to_owned(),
                         port: 80,
                         protocol: "TCP".to_owned(),
                     },
