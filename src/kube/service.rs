@@ -140,6 +140,8 @@ impl Service {
         let mut n_ip_eps_healthy = 0;
         for (k, ep) in self.endpoints.iter().enumerate() {
             if i == k {
+                n_ip_eps += 1;
+                n_ip_eps_healthy += 1;
                 continue;
             }
             if ep.addr.ip() != ep_ip {

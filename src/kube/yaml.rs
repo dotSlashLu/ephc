@@ -43,7 +43,13 @@ impl FromStr for ServiceRepr {
     type Err = serde_yaml::Error;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        serde_yaml::from_str(s)
+        match serde_yaml::from_str::<Self>(s) {
+            Ok(mut repr) => {
+                repr.yaml = s.to_owned();
+                Ok(repr)
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
