@@ -74,10 +74,14 @@ impl Endpoint {
         }
     }
 
-    pub fn reset_counter(&mut self) -> &Self {
+    fn reset_counter(&mut self) {
         self.counter.up = 0;
         self.counter.down = 0;
-        self
+    }
+
+    pub fn set_status(&mut self, status: EndpointStatus) {
+        self.reset_counter();
+        self.status = status;
     }
 }
 

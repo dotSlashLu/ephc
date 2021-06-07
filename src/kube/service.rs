@@ -83,6 +83,7 @@ impl Service {
             self.endpoints[i].status = EndpointStatus::Removed;
             let original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
             let new_version = super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
+            self.repr = original_repr;
             self.our_version = new_version;
             return Ok(());
         }
@@ -109,8 +110,7 @@ impl Service {
         self.our_version = new_version;
 
         let ep = &mut self.endpoints[i];
-        ep.reset_counter();
-        ep.status = EndpointStatus::Removed;
+        ep.set_status(EndpointStatus::Removed);
 
         info!(
             "ep {} removed, new version: {:?}",
@@ -130,8 +130,7 @@ impl Service {
             ip: ep_ip.to_string(),
         }) {
             let ep = &mut self.endpoints[i];
-            ep.reset_counter();
-            ep.status = EndpointStatus::Healthy;
+            ep.set_status(EndpointStatus::Healthy);
             info!("ep {} restored without changing k8s", ep_ip);
             return Ok(());
         }
@@ -159,8 +158,24 @@ impl Service {
                 n_ip_eps_healthy, n_ip_eps
             );
             let ep = &mut self.endpoints[i];
-            ep.reset_counter();
-            ep.status = EndpointStatus::Healthy;
+            ep.set_status(EndpointStatus::Healthy);
+            return Ok(());
+        }
+
+        // An address is marked removed but remains in k8s indicates all
+        //  addresses were restored since every one of them are down.
+        // When one IP turned healthy again, mark all of eps as healthy and let
+        //  the next turn of probe to remove the down ones.
+        if self.repr.subsets[0].addresses.contains(&AddressRepr {
+            ip: ep_ip.to_string(),
+        }) {
+            info!(
+                "one of all unhealthy endpoints restored, marking all \
+                endpoints healthy."
+            );
+            for ep in &mut self.endpoints {
+                ep.set_status(EndpointStatus::Healthy);
+            }
             return Ok(());
         }
 
@@ -173,8 +188,7 @@ impl Service {
         self.our_version = new_version;
 
         let ep = &mut self.endpoints[i];
-        ep.reset_counter();
-        ep.status = EndpointStatus::Healthy;
+        ep.set_status(EndpointStatus::Healthy);
 
         info!("ep {} restored, new version: {:?}", ep_ip, self.our_version);
         Ok(())
