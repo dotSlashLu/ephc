@@ -56,7 +56,7 @@ impl Service {
         }))
     }
 
-    // TODO: does all eps only contain one subset?
+    // TODO: Does all eps only contain one subset?
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
         let ep_addr = &self.endpoints[i].addr;
         info!("removing ep: {:?}", ep_addr);
@@ -71,11 +71,13 @@ impl Service {
             return Ok(());
         }
 
-        // if the last ep is going to be removed, meaning every ep is unhealthy,
+        // If the last ep is going to be removed, meaning every ep is unhealthy,
         // restore all original eps in k8s for quicker restoration
         //
-        // TODO: right now, when only part of the eps are up, the remaining down
+        // TODO: Right now, when only part of the eps are up, the remaining down
         //  eps still remains in k8s
+        //  But they will be removed in the next turn of probe, so this priority
+        //  is low
         if self.repr.subsets[0].addresses.len() == 1 {
             info!("all eps marked as removed, restoring all eps in k8s");
             self.endpoints[i].status = EndpointStatus::Removed;
@@ -117,10 +119,9 @@ impl Service {
         Ok(())
     }
 
-    // TODO: does all eps only contain one subsets
+    // TODO: Does all eps only contain one subsets
     pub fn restore_ep(&mut self, i: usize) -> Result<()> {
-        let mut ep = &mut self.endpoints[i];
-        let ep_addr = ep.addr;
+        let ep_addr = &self.endpoints[i].addr;
         info!("restoring ep: {:?}", ep_addr);
 
         let ep_ip = ep_addr.ip();
@@ -128,9 +129,38 @@ impl Service {
         if self.repr.subsets[0].addresses.contains(&AddressRepr {
             ip: ep_ip.to_string(),
         }) {
+            let ep = &mut self.endpoints[i];
             ep.reset_counter();
             ep.status = EndpointStatus::Healthy;
             info!("ep {} restored without changing k8s", ep_ip);
+            return Ok(());
+        }
+
+        // only restore this IP from k8s when all ports of this IP are up
+        let mut n_ip_eps = 0;
+        let mut n_ip_eps_healthy = 0;
+        for (k, ep) in self.endpoints.iter().enumerate() {
+            if i == k {
+                continue;
+            }
+            if ep.addr.ip() != ep_ip {
+                continue;
+            }
+            n_ip_eps += 1;
+            if ep.status == EndpointStatus::Healthy {
+                n_ip_eps_healthy += 1;
+            }
+        }
+
+        if n_ip_eps != n_ip_eps_healthy {
+            info!(
+                "only {} of {} addrs of this IP have turned healthy, \
+                    won't actually restore",
+                n_ip_eps_healthy, n_ip_eps
+            );
+            let ep = &mut self.endpoints[i];
+            ep.reset_counter();
+            ep.status = EndpointStatus::Healthy;
             return Ok(());
         }
 
@@ -142,6 +172,7 @@ impl Service {
         let new_version = super::apply_svc(&self.name, &yml)?;
         self.our_version = new_version;
 
+        let ep = &mut self.endpoints[i];
         ep.reset_counter();
         ep.status = EndpointStatus::Healthy;
 
