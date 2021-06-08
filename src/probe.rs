@@ -8,12 +8,19 @@ use crate::kube::Service;
 pub(crate) async fn probe(
     svcs: Arc<RwLock<HashMap<String, Arc<RwLock<Service>>>>>,
     connect_timeout: u64,
-) {
-    let svcs = svcs.read().await;
+) -> Option<tokio::sync::TryLockError> {
+    let svcs = match svcs.try_write() {
+        Err(e) => {
+            debug!("services locked, should not schedule new probe");
+            return Some(e)
+        },
+        Ok(svcs) => svcs,
+    };
     for svc in svcs.values() {
         let svc = svc.clone();
         probe_svc(svc, connect_timeout).await;
     }
+    None
 }
 
 async fn probe_svc(svc: Arc<RwLock<Service>>, connect_timeout: u64) {

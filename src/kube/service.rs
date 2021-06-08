@@ -1,5 +1,5 @@
 use crate::error::Result;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use std::{net::SocketAddr, str::FromStr};
 
 use super::endpoint::*;
@@ -58,7 +58,8 @@ impl Service {
 
     // TODO: Does all eps only contain one subset?
     pub fn remove_ep(&mut self, i: usize) -> Result<()> {
-        let ep_addr = &self.endpoints[i].addr;
+        let ep_addr = self.endpoints[i].addr.clone();
+        let ep_ip = ep_addr.ip();
         info!("removing ep: {:?}", ep_addr);
 
         // if there're only one ep, do nothing except mark it
@@ -74,13 +75,13 @@ impl Service {
         // If the last ep is going to be removed, meaning every ep is unhealthy,
         // restore all original eps in k8s for quicker restoration
         //
-        // TODO: Right now, when only part of the eps are up, the remaining down
-        //  eps still remains in k8s
-        //  But they will be removed in the next turn of probe, so this priority
-        //  is low
         if self.repr.subsets[0].addresses.len() == 1 {
             info!("all eps marked as removed, restoring all eps in k8s");
-            self.endpoints[i].status = EndpointStatus::Removed;
+            for ep in &mut self.endpoints {
+                if ep.addr.ip() == ep_ip {
+                    ep.set_status(EndpointStatus::Removed);
+                }
+            }
             let original_repr = ServiceRepr::from_str(&self.repr.yaml)?;
             let new_version = super::apply_svc(&self.name, &original_repr.to_yaml()?)?;
             self.repr = original_repr;
@@ -88,7 +89,6 @@ impl Service {
             return Ok(());
         }
 
-        let ep_ip = ep_addr.ip();
         for subset in &mut self.repr.subsets {
             subset.addresses.retain(|addr| {
                 let ip = match std::net::IpAddr::from_str(&addr.ip) {
@@ -109,31 +109,22 @@ impl Service {
         let new_version = super::apply_svc(&self.name, &yml)?;
         self.our_version = new_version;
 
-        let ep = &mut self.endpoints[i];
-        ep.set_status(EndpointStatus::Removed);
+        // mark all eps with the same IP as removed
+        for ep in &mut self.endpoints {
+            if ep.addr.ip() == ep_ip {
+                ep.set_status(EndpointStatus::Removed);
+            }
+        }
 
-        info!(
-            "ep {} removed, new version: {:?}",
-            ep.addr, self.our_version
-        );
+        info!("ep {} removed, new version: {:?}", ep_ip, self.our_version);
         Ok(())
     }
 
-    // TODO: Does all eps only contain one subsets
+    // TODO: Does all eps only contain one subsets?
     pub fn restore_ep(&mut self, i: usize) -> Result<()> {
         let ep_addr = &self.endpoints[i].addr;
         info!("restoring ep: {:?}", ep_addr);
-
         let ep_ip = ep_addr.ip();
-        // ep was marked down without changing repr, just mark it will do
-        if self.repr.subsets[0].addresses.contains(&AddressRepr {
-            ip: ep_ip.to_string(),
-        }) {
-            let ep = &mut self.endpoints[i];
-            ep.set_status(EndpointStatus::Healthy);
-            info!("ep {} restored without changing k8s", ep_ip);
-            return Ok(());
-        }
 
         // only restore this IP from k8s when all ports of this IP are up
         let mut n_ip_eps = 0;
@@ -168,6 +159,11 @@ impl Service {
         //  addresses were restored since every one of them are down.
         // When one IP turned healthy again, mark all of eps as healthy and let
         //  the next turn of probe to remove the down ones.
+        //
+        // TODO: Right now, when only part of the eps are up, the remaining down
+        //  eps still remains in k8s
+        //  But they will be removed in the next turn of probe, so this priority
+        //  is low
         if self.repr.subsets[0].addresses.contains(&AddressRepr {
             ip: ep_ip.to_string(),
         }) {
@@ -179,11 +175,11 @@ impl Service {
                 ep.set_status(EndpointStatus::Healthy);
             }
             return Ok(());
+        } else {
+            self.repr.subsets[0].addresses.push(AddressRepr {
+                ip: ep_ip.to_string(),
+            });
         }
-
-        self.repr.subsets[0].addresses.push(AddressRepr {
-            ip: ep_ip.to_string(),
-        });
 
         let yml = self.repr.to_yaml()?;
         let new_version = super::apply_svc(&self.name, &yml)?;
