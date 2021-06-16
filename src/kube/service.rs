@@ -1,5 +1,5 @@
 use crate::error::Result;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use std::{net::SocketAddr, str::FromStr};
 
 use super::endpoint::*;

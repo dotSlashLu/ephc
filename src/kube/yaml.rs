@@ -9,7 +9,8 @@ pub struct AddressRepr {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortRepr {
-    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
     pub port: u32,
     pub protocol: String,
 }
@@ -79,12 +80,12 @@ mod test {
                 }],
                 ports: vec![
                     PortRepr {
-                        name: "23".to_owned(),
+                        name: Some("23".to_owned()),
                         port: 23,
                         protocol: "UDP".to_owned(),
                     },
                     PortRepr {
-                        name: "23".to_owned(),
+                        name: None,
                         port: 80,
                         protocol: "TCP".to_owned(),
                     },
@@ -92,6 +93,6 @@ mod test {
             }],
             yaml: "s".to_owned(),
         };
-        println!("{:?}", s.to_yaml());
+        println!("{:?}", s.to_yaml().unwrap());
     }
 }

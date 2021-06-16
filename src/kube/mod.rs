@@ -127,19 +127,16 @@ mod tests {
         kind: Endpoints
         metadata:
           creationTimestamp: 2019-03-20T07:23:28Z
-          name: account
+          name: ephc-test
           namespace: default
           resourceVersion: \"82479279\"
           selfLink: /api/v1/namespaces/default/endpoints/ephc-test
           uid: 0ec10531-4ae1-11e9-9c9c-f86eee307061
         subsets:
         - addresses:
-          - ip: 172.16.61.84
-          - ip: 172.16.61.85
-          - ip: 172.16.61.86
-          - ip: 172.16.61.87
-          - ip: 172.16.61.88
-          - ip: 172.16.61.90
+          - ip: 172.0.1.4
+          - ip: 172.0.1.5
+          - ip: 172.0.1.6
           ports:
           - name: port80
             port: 31000
