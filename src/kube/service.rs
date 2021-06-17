@@ -15,11 +15,16 @@ pub(crate) struct Service {
     pub our_version: String,
     // yaml representation of the service
     pub repr: ServiceRepr,
+    alerter: std::sync::Arc<crate::alert::Alert>,
 }
 
 impl Service {
     // construct a Service from yaml
-    pub fn new(yml_str: String, threshold: Threshold) -> Result<Option<Self>> {
+    pub fn new(
+        yml_str: String,
+        threshold: Threshold,
+        alerter: std::sync::Arc<crate::alert::Alert>,
+    ) -> Result<Option<Self>> {
         let mut svc_repr = serde_yaml::from_str::<ServiceRepr>(&yml_str)?;
         svc_repr.yaml = yml_str;
         let subsets: &Vec<SubsetRepr> = &svc_repr.subsets;
@@ -53,14 +58,16 @@ impl Service {
             endpoints: eps,
             our_version: svc_repr.metadata.resource_version.clone(),
             repr: svc_repr,
+            alerter,
         }))
     }
 
     // TODO: Does all eps only contain one subset?
-    pub fn remove_ep(&mut self, i: usize) -> Result<()> {
+    pub async fn remove_ep(&mut self, i: usize) -> Result<()> {
         let ep_addr = self.endpoints[i].addr.clone();
         let ep_ip = ep_addr.ip();
         info!("removing ep: {:?}", ep_addr);
+        self.alerter.alert(crate::alert::Msg::EpDown(self.name.clone(), ep_addr.to_string())).await;
 
         // if there're only one ep, do nothing except mark it
         if self.endpoints.len() <= 1 {
@@ -76,6 +83,7 @@ impl Service {
         // restore all original eps in k8s for quicker restoration
         //
         if self.repr.subsets[0].addresses.len() == 1 {
+            self.alerter.alert(crate::alert::Msg::AllEpDown(self.name.clone())).await;
             info!("all eps marked as removed, restoring all eps in k8s");
             for ep in &mut self.endpoints {
                 if ep.addr.ip() == ep_ip {
@@ -121,9 +129,10 @@ impl Service {
     }
 
     // TODO: Does all eps only contain one subsets?
-    pub fn restore_ep(&mut self, i: usize) -> Result<()> {
+    pub async fn restore_ep(&mut self, i: usize) -> Result<()> {
         let ep_addr = &self.endpoints[i].addr;
         info!("restoring ep: {:?}", ep_addr);
+        self.alerter.alert(crate::alert::Msg::EpUp(self.name.clone(), ep_addr.to_string())).await;
         let ep_ip = ep_addr.ip();
 
         // only restore this IP from k8s when all ports of this IP are up

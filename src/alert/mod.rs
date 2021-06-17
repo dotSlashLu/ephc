@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-mod wecom;
+pub mod wecom;
 
 #[async_trait]
 pub trait AlertChannel {
@@ -26,12 +26,12 @@ impl Msg {
     }
 }
 
-pub struct Alert<T: AlertChannel> {
-    channel: T,
+pub struct Alert {
+    channel: Box<dyn AlertChannel + Send + Sync>,
 }
 
-impl<T: AlertChannel> Alert<T> {
-    pub fn new(channel: T) -> Self {
+impl Alert {
+    pub fn new(channel: Box<dyn AlertChannel + Send + Sync>) -> Self {
         Self {
             channel
         }
@@ -39,5 +39,13 @@ impl<T: AlertChannel> Alert<T> {
 
     pub async fn alert(&self, msg: Msg) {
         self.channel.send(msg).await
+    }
+}
+
+impl std::fmt::Debug for Alert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Alert")
+        .field("channel", &"".to_owned())
+        .finish()
     }
 }

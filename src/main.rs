@@ -19,6 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         HashMap::<String, Arc<RwLock<kube::Service>>>::new(),
     ));
 
+    let a = Arc::new(alert::Alert::new(Box::new(alert::wecom::WeCom::new("http://baidu.com"))));
     let svcs = services.clone();
     let mut interval = time::interval(Duration::from_secs(opt.refresh_interval));
     let opt_clone = opt.clone();
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 restore: opt_clone.restore,
                 remove: opt_clone.remove,
             };
-            let res = match kube::get_svcs(&opt_clone.allow_list, &opt_clone.block_list, t) {
+            let res = match kube::get_svcs(&opt_clone.allow_list, &opt_clone.block_list, t, a.clone()) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
