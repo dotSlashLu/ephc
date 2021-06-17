@@ -1,12 +1,13 @@
-use reqwest;
 use async_trait::async_trait;
 
+mod wecom;
+
 #[async_trait]
-trait AlertChannel {
+pub trait AlertChannel {
 	async fn send(&self, msg: Msg);
 }
 
-enum Msg {
+pub enum Msg {
     // service name, ep addr
     EpDown(String, String),
     // service name, ep addr
@@ -18,19 +19,25 @@ enum Msg {
 impl Msg {
     fn to_string(&self) -> String {
         match self {
-            Msg::EpDown(svc, addr) => format!("Service {} endpoint {} is DOWN", svc, addr),
-            _ => "".to_owned()
+            Msg::EpDown(svc, addr) => format!("☠ Service {} endpoint {} is DOWN", svc, addr),
+            Msg::EpUp(svc, addr) => format!("👍 Service {} endpoint {} is UP", svc, addr),
+            Msg::AllEpDown(svc) => format!("☠☠☠ Service {} all endpoints DOWN", svc),
         }
     }
 }
 
-struct WeCom {
-    url: &'static str,
+pub struct Alert<T: AlertChannel> {
+    channel: T,
 }
 
-#[async_trait]
-impl AlertChannel for WeCom {
-    async fn send(&self, msg: Msg) {
-            
+impl<T: AlertChannel> Alert<T> {
+    pub fn new(channel: T) -> Self {
+        Self {
+            channel
+        }
+    }
+
+    pub async fn alert(&self, msg: Msg) {
+        self.channel.send(msg).await
     }
 }
