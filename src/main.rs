@@ -9,6 +9,7 @@ mod cmd;
 mod error;
 mod kube;
 mod probe;
+mod alert;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
