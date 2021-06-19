@@ -103,7 +103,7 @@ pub(crate) fn init() -> AppOpt {
                 .value_name("CLUSTER")
                 .required(false)
                 .takes_value(true)
-                .help("How many times an endpoint removed successfully probed should be restored"),
+                .help("cluster name of this kubernetes used with alert"),
         )
         .arg(
             Arg::with_name("alert")
@@ -113,7 +113,12 @@ pub(crate) fn init() -> AppOpt {
                 .required(false)
                 .multiple(true)
                 .takes_value(true)
-                .help("How many times an endpoint removed successfully probed should be restored"),
+                .help(
+                    "alert webhook url, in the form of scheme://url, \
+                    for example: wecom://https://exmaple.com, \
+                    supported channels:
+                        - wecom(and compatibles)",
+                ),
         )
         .get_matches();
 

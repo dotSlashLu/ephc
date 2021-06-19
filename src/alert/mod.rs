@@ -64,7 +64,7 @@ impl Alert {
         }
         let mut url_parts = url.split("://");
         if let Some(scheme) = url_parts.nth(0) {
-            let realurl: String = url_parts.skip(1).collect::<Vec<&str>>().join("");
+            let realurl: String = url_parts.collect::<Vec<&str>>().join("://");
             return match scheme {
                 "wecom" => {
                     let channel = wecom::WeCom::new(realurl);
