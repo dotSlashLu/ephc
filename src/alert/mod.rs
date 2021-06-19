@@ -27,18 +27,18 @@ impl Msg {
         match self {
             Msg::EpDown(svc, addr) => {
                 format!(
-                    "☠ ENDPOINT DOWN\nCluster: {}\nService: {}\nendpoint: {}",
+                    r#"☠ ENDPOINT DOWN\nCluster: {}\nService: {}\nendpoint: {}"#,
                     cluster_name, svc, addr
                 )
             }
             Msg::EpUp(svc, addr) => {
                 format!(
-                    "👍 ENDPOINT UP\nCluster: {}\nService: {}\nendpoint: {}",
+                    r#"👍 ENDPOINT UP\nCluster: {}\nService: {}\nendpoint: {}"#,
                     cluster_name, svc, addr
                 )
             }
             Msg::AllEpDown(svc) => format!(
-                "☠☠☠ ALL ENDPOINTS DOWN\nCluster: {}\nService: {}",
+                r#"☠☠☠ ALL ENDPOINTS DOWN\nCluster: {}\nService: {}"#,
                 cluster_name, svc
             ),
         }

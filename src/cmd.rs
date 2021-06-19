@@ -99,7 +99,7 @@ pub(crate) fn init() -> AppOpt {
         .arg(
             Arg::with_name("cluster_name")
                 .short("C")
-                .long("cluster_name")
+                .long("cluster")
                 .value_name("CLUSTER")
                 .required(false)
                 .takes_value(true)
