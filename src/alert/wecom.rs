@@ -23,13 +23,14 @@ impl AlertChannel for WeCom {
     async fn send(&self, msg: Msg) {
         let msg = format!(
             r#"{{
-            "msgtype": "text",
-            "text": {{ 
-                "content":"{}"
-            }}
-        }}"#,
+                "msgtype": "text",
+                "text": {{
+                    "content":"{}"
+                }}
+            }}"#,
             msg.to_string()
         );
+        debug!("sending alert to {}, message: {}", &self.url, &msg);
         match self.http.post(&self.url).body(msg).send().await {
             Err(e) => error!("failed to send alert message: {}", e),
             _ => debug!("alert message sent"),
