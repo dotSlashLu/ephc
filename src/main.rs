@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use log::{debug, error, info};
 use std::{collections::HashMap, sync::Arc};
 use tokio::{
@@ -5,24 +6,27 @@ use tokio::{
     time::{self, Duration},
 };
 
+lazy_static! {
+    static ref CFG: cmd::AppOpt = cmd::init();
+}
+
+mod alert;
 mod cmd;
 mod error;
 mod kube;
 mod probe;
-mod alert;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opt = cmd::init();
+    let alert = Arc::new(alert::Alert::from_url_scheme(&CFG.alert_channel));
 
     let services = Arc::new(RwLock::new(
         HashMap::<String, Arc<RwLock<kube::Service>>>::new(),
     ));
 
-    let a = Arc::new(alert::Alert::new(Box::new(alert::wecom::WeCom::new("http://baidu.com"))));
     let svcs = services.clone();
-    let mut interval = time::interval(Duration::from_secs(opt.refresh_interval));
-    let opt_clone = opt.clone();
+    let mut interval = time::interval(Duration::from_secs(CFG.refresh_interval));
+    let opt_clone = CFG.clone();
     let jh_refresh = tokio::task::spawn(async move {
         loop {
             interval.tick().await;
@@ -31,7 +35,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 restore: opt_clone.restore,
                 remove: opt_clone.remove,
             };
-            let res = match kube::get_svcs(&opt_clone.allow_list, &opt_clone.block_list, t, a.clone()) {
+            let res = match kube::get_svcs(
+                &opt_clone.allow_list,
+                &opt_clone.block_list,
+                t,
+                alert.clone(),
+            ) {
                 Ok(res) => res,
                 Err(e) => {
                     error!("failed to get services: {}", e);
@@ -87,14 +96,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let svcs = services.clone();
-    let probe_interval = opt.probe_interval;
+    let probe_interval = CFG.probe_interval;
     let mut interval = time::interval(Duration::from_millis(probe_interval));
     let jh_probe = tokio::task::spawn(async move {
         loop {
             interval.tick().await;
             debug!("start probing");
             let svcs = svcs.clone();
-            probe::probe(svcs, opt.connection_timeout).await;
+            probe::probe(svcs, CFG.connection_timeout).await;
             debug!("finished probing");
         }
     });

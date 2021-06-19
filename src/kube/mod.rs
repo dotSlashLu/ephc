@@ -11,7 +11,12 @@ mod endpoint;
 mod service;
 pub mod yaml;
 
+// TODO
+// glob import doesn't reexport anything because no candidate is public enough
+//  is this a bug?
+#[allow(unused_imports)]
 pub use endpoint::*;
+#[allow(unused_imports)]
 pub use service::*;
 
 fn exec(cmdline: &str) -> Result<String> {
@@ -77,7 +82,7 @@ pub(crate) fn get_svcs(
     allow: &Option<Vec<String>>,
     block: &Option<Vec<String>>,
     t: Threshold,
-    alerter: Arc<crate::alert::Alert>
+    alerter: Arc<crate::alert::Alert>,
 ) -> Result<Vec<Arc<RwLock<Service>>>> {
     let names: Vec<String> = match allow {
         Some(allow) => allow.iter().map(|n| (*n).to_owned()).collect(),
@@ -124,6 +129,7 @@ fn get_svc_repr(svc_name: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::sync::Arc;
 
     const YML_STR: &str = "
         apiVersion: v1
@@ -162,13 +168,17 @@ mod tests {
         println!("{:?}", svc);
     }
 
-    // #[test]
-    // fn service_new() {
-    //     let threshold = super::Threshold {
-    //         restore: 3,
-    //         remove: 3,
-    //     };
-    //     let svc = super::Service::new(String::from(YML_STR), threshold);
-    //     println!("{:?}", svc);
-    // }
+    #[test]
+    fn service_new() {
+        let threshold = super::Threshold {
+            restore: 3,
+            remove: 3,
+        };
+        let svc = super::Service::new(
+            String::from(YML_STR),
+            threshold,
+            Arc::new(crate::alert::Alert::default()),
+        );
+        println!("{:?}", svc);
+    }
 }

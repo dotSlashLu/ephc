@@ -150,12 +150,14 @@ dependencies = [
  "async-trait",
  "clap",
  "env_logger",
+ "lazy_static",
  "log",
  "reqwest",
  "serde",
  "serde_yaml",
  "tokio",
  "tokio-stream",
+ "url",
 ]
 
 [[package]]

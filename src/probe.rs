@@ -102,67 +102,68 @@ mod tests {
     use std::{net::SocketAddr, str::FromStr, sync::Arc};
     use tokio::sync::RwLock;
 
-    // #[tokio::test]
-    // async fn do_probe() {
-    //     let eps = vec![
-    //         kube::Endpoint {
-    //             addr: SocketAddr::from_str("127.0.0.1:44307").unwrap(),
-    //             protocol: kube::Protocol::TCP,
-    //             status: kube::EndpointStatus::Healthy,
-    //             counter: kube::Counter { up: 0, down: 0 },
-    //             threshold: Threshold {
-    //                 restore: 3,
-    //                 remove: 3,
-    //             },
-    //         },
-    //         kube::Endpoint {
-    //             addr: SocketAddr::from_str("127.0.0.1:80").unwrap(),
-    //             protocol: kube::Protocol::TCP,
-    //             status: kube::EndpointStatus::Healthy,
-    //             counter: kube::Counter { up: 0, down: 0 },
-    //             threshold: Threshold {
-    //                 restore: 3,
-    //                 remove: 3,
-    //             },
-    //         },
-    //     ];
+    #[tokio::test]
+    async fn do_probe() {
+        let eps = vec![
+            kube::Endpoint {
+                addr: SocketAddr::from_str("127.0.0.1:44307").unwrap(),
+                protocol: kube::Protocol::TCP,
+                status: kube::EndpointStatus::Healthy,
+                counter: kube::Counter { up: 0, down: 0 },
+                threshold: Threshold {
+                    restore: 3,
+                    remove: 3,
+                },
+            },
+            kube::Endpoint {
+                addr: SocketAddr::from_str("127.0.0.1:80").unwrap(),
+                protocol: kube::Protocol::TCP,
+                status: kube::EndpointStatus::Healthy,
+                counter: kube::Counter { up: 0, down: 0 },
+                threshold: Threshold {
+                    restore: 3,
+                    remove: 3,
+                },
+            },
+        ];
 
-    //     let yml_str = "
-    //     apiVersion: v1
-    //     kind: Endpoints
-    //     metadata:
-    //       creationTimestamp: 2019-03-20T07:23:28Z
-    //       name: ephc-test
-    //       namespace: default
-    //       resourceVersion: \"82479279\"
-    //       selfLink: /api/v1/namespaces/default/endpoints/ephc-test
-    //       uid: 0ec10531-4ae1-11e9-9c9c-f86eee307061
-    //     subsets:
-    //     - addresses:
-    //       - ip: 172.0.1.4
-    //       - ip: 172.0.1.5
-    //       - ip: 172.0.1.6
-    //       ports:
-    //       - name: port80
-    //         port: 31000
-    //         protocol: TCP
-    //       - name: port82
-    //         port: 31002
-    //         protocol: TCP
-    //       - name: port81
-    //         port: 31001
-    //         protocol: TCP";
+        let yml_str = "
+        apiVersion: v1
+        kind: Endpoints
+        metadata:
+          creationTimestamp: 2019-03-20T07:23:28Z
+          name: ephc-test
+          namespace: default
+          resourceVersion: \"82479279\"
+          selfLink: /api/v1/namespaces/default/endpoints/ephc-test
+          uid: 0ec10531-4ae1-11e9-9c9c-f86eee307061
+        subsets:
+        - addresses:
+          - ip: 172.0.1.4
+          - ip: 172.0.1.5
+          - ip: 172.0.1.6
+          ports:
+          - name: port80
+            port: 31000
+            protocol: TCP
+          - name: port82
+            port: 31002
+            protocol: TCP
+          - name: port81
+            port: 31001
+            protocol: TCP";
 
-    //     let svc = Arc::new(RwLock::new(kube::Service {
-    //         name: "test".to_owned(),
-    //         endpoints: eps,
-    //         our_version: "0".to_owned(),
-    //         repr: kube::yaml::ServiceRepr::from_str(yml_str).unwrap(),
-    //     }));
+        let svc = Arc::new(RwLock::new(kube::Service {
+            name: "test".to_owned(),
+            endpoints: eps,
+            our_version: "0".to_owned(),
+            repr: kube::yaml::ServiceRepr::from_str(yml_str).unwrap(),
+            alerter: Arc::new(crate::alert::Alert::default()),
+        }));
 
-    //     super::probe_svc(svc.clone(), 100).await;
+        super::probe_svc(svc.clone(), 100).await;
 
-    //     let svc_clone = svc.read().await;
-    //     println!("eps after edit: {:?}", svc_clone.endpoints);
-    // }
+        let svc_clone = svc.read().await;
+        println!("eps after edit: {:?}", svc_clone.endpoints);
+    }
 }

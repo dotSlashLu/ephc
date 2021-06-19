@@ -15,6 +15,8 @@ pub struct AppOpt {
     pub connection_timeout: u64,
     pub restore: u32,
     pub remove: u32,
+    pub cluster_name: Option<String>,
+    pub alert_channel: Option<String>,
 }
 
 pub(crate) fn init() -> AppOpt {
@@ -94,6 +96,25 @@ pub(crate) fn init() -> AppOpt {
                 .default_value(DEFAULT_RESTORE)
                 .help("How many times an endpoint removed successfully probed should be restored"),
         )
+        .arg(
+            Arg::with_name("cluster_name")
+                .short("C")
+                .long("cluster_name")
+                .value_name("CLUSTER")
+                .required(false)
+                .takes_value(true)
+                .help("How many times an endpoint removed successfully probed should be restored"),
+        )
+        .arg(
+            Arg::with_name("alert")
+                .short("A")
+                .long("alert")
+                .value_name("ALERT")
+                .required(false)
+                .multiple(true)
+                .takes_value(true)
+                .help("How many times an endpoint removed successfully probed should be restored"),
+        )
         .get_matches();
 
     let allow_list_values = matches.values_of("allow_list");
@@ -133,6 +154,16 @@ pub(crate) fn init() -> AppOpt {
         None => DEFAULT_REMOVE.parse().unwrap(),
     };
 
+    let cluster_name: Option<String> = match matches.value_of("cluster_name") {
+        Some(i) => Some(i.to_owned()),
+        None => None,
+    };
+
+    let alert_channel: Option<String> = match matches.value_of("alert") {
+        Some(i) => Some(i.to_owned()),
+        None => None,
+    };
+
     AppOpt {
         allow_list,
         block_list,
@@ -141,5 +172,7 @@ pub(crate) fn init() -> AppOpt {
         connection_timeout,
         restore,
         remove,
+        cluster_name,
+        alert_channel,
     }
 }

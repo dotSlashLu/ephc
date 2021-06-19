@@ -15,7 +15,7 @@ pub(crate) struct Service {
     pub our_version: String,
     // yaml representation of the service
     pub repr: ServiceRepr,
-    alerter: std::sync::Arc<crate::alert::Alert>,
+    pub alerter: std::sync::Arc<crate::alert::Alert>,
 }
 
 impl Service {
@@ -67,7 +67,12 @@ impl Service {
         let ep_addr = self.endpoints[i].addr.clone();
         let ep_ip = ep_addr.ip();
         info!("removing ep: {:?}", ep_addr);
-        self.alerter.alert(crate::alert::Msg::EpDown(self.name.clone(), ep_addr.to_string())).await;
+        self.alerter
+            .alert(crate::alert::Msg::EpDown(
+                self.name.clone(),
+                ep_addr.to_string(),
+            ))
+            .await;
 
         // if there're only one ep, do nothing except mark it
         if self.endpoints.len() <= 1 {
@@ -83,7 +88,9 @@ impl Service {
         // restore all original eps in k8s for quicker restoration
         //
         if self.repr.subsets[0].addresses.len() == 1 {
-            self.alerter.alert(crate::alert::Msg::AllEpDown(self.name.clone())).await;
+            self.alerter
+                .alert(crate::alert::Msg::AllEpDown(self.name.clone()))
+                .await;
             info!("all eps marked as removed, restoring all eps in k8s");
             for ep in &mut self.endpoints {
                 if ep.addr.ip() == ep_ip {
@@ -132,7 +139,12 @@ impl Service {
     pub async fn restore_ep(&mut self, i: usize) -> Result<()> {
         let ep_addr = &self.endpoints[i].addr;
         info!("restoring ep: {:?}", ep_addr);
-        self.alerter.alert(crate::alert::Msg::EpUp(self.name.clone(), ep_addr.to_string())).await;
+        self.alerter
+            .alert(crate::alert::Msg::EpUp(
+                self.name.clone(),
+                ep_addr.to_string(),
+            ))
+            .await;
         let ep_ip = ep_addr.ip();
 
         // only restore this IP from k8s when all ports of this IP are up
