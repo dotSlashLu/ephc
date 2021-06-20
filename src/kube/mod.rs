@@ -11,7 +11,12 @@ mod endpoint;
 mod service;
 pub mod yaml;
 
+// TODO
+// glob import doesn't reexport anything because no candidate is public enough
+//  is this a bug?
+#[allow(unused_imports)]
 pub use endpoint::*;
+#[allow(unused_imports)]
 pub use service::*;
 
 fn exec(cmdline: &str) -> Result<String> {
@@ -77,6 +82,7 @@ pub(crate) fn get_svcs(
     allow: &Option<Vec<String>>,
     block: &Option<Vec<String>>,
     t: Threshold,
+    alerter: Arc<crate::alert::Alert>,
 ) -> Result<Vec<Arc<RwLock<Service>>>> {
     let names: Vec<String> = match allow {
         Some(allow) => allow.iter().map(|n| (*n).to_owned()).collect(),
@@ -84,7 +90,9 @@ pub(crate) fn get_svcs(
     };
     let mut svcs = Vec::<Arc<RwLock<Service>>>::new();
     for n in names {
-        let svc = get_svc(n, t.clone())?;
+        // let svc = get_svc(n, t.clone())?;
+        let yml_str = get_svc_repr(&n)?;
+        let svc = Service::new(yml_str, t.clone(), alerter.clone())?;
         if svc.is_none() {
             continue;
         }
@@ -113,14 +121,15 @@ fn get_svc_repr(svc_name: &str) -> Result<String> {
     ))
 }
 
-fn get_svc(svc_name: String, t: Threshold) -> Result<Option<Service>> {
-    let yml_str = get_svc_repr(&svc_name)?;
-    Service::new(yml_str, t)
-}
+// fn get_svc(svc_name: String, t: Threshold) -> Result<Option<Service>> {
+//     let yml_str = get_svc_repr(&svc_name)?;
+//     Service::new(yml_str, t)
+// }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::sync::Arc;
 
     const YML_STR: &str = "
         apiVersion: v1
@@ -165,7 +174,11 @@ mod tests {
             restore: 3,
             remove: 3,
         };
-        let svc = super::Service::new(String::from(YML_STR), threshold);
+        let svc = super::Service::new(
+            String::from(YML_STR),
+            threshold,
+            Arc::new(crate::alert::Alert::default()),
+        );
         println!("{:?}", svc);
     }
 }

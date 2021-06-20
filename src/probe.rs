@@ -49,7 +49,7 @@ async fn probe_svc(svc: Arc<RwLock<Service>>, connect_timeout: u64) {
                             if !ep.up() {
                                 return;
                             }
-                            match svc.restore_ep(i) {
+                            match svc.restore_ep(i).await {
                                 Err(e) => error!("failed to restore ep: {:?}: {}", addr, e),
                                 _ => (),
                             }
@@ -59,7 +59,7 @@ async fn probe_svc(svc: Arc<RwLock<Service>>, connect_timeout: u64) {
                             if !ep.down() {
                                 return;
                             }
-                            match svc.remove_ep(i) {
+                            match svc.remove_ep(i).await {
                                 Err(e) => error!("failed to remove ep: {:?}: {}", addr, e),
                                 _ => (),
                             }
@@ -86,7 +86,7 @@ async fn probe_svc(svc: Arc<RwLock<Service>>, connect_timeout: u64) {
             error!("failed to connect to {:?}: timed out", ep.addr);
             let remove = ep.down();
             if remove {
-                match svc_w.remove_ep(i) {
+                match svc_w.remove_ep(i).await {
                     Err(e) => error!("failed to remove ep: {:?}: {}", addr, e),
                     _ => (),
                 }
@@ -158,6 +158,7 @@ mod tests {
             endpoints: eps,
             our_version: "0".to_owned(),
             repr: kube::yaml::ServiceRepr::from_str(yml_str).unwrap(),
+            alerter: Arc::new(crate::alert::Alert::default()),
         }));
 
         super::probe_svc(svc.clone(), 100).await;
